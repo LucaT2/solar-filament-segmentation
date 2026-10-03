@@ -93,6 +93,10 @@ head and watershed. The PQ levers are boundary precision (±1 px), connectivity,
 - [ ] **Input:** limb flattening or a radial channel, disk mask, blur and contrast augmentation (Mauna Loa).
 - [ ] **Post-processing tuned on CV PQ:** probability threshold (≈ outline width), minimum area, per-component
       confidence cut-off, optional gap-closing only if Stage 4 shows predicted fragmentation.
+- [ ] **Object-level scoring:** compare (a) a small classifier that rescores each U-Net connected component vs.
+      (b) Mask R-CNN (torchvision, full resolution) as a separate model or ensemble partner. Mask R-CNN's 28×28 mask
+      head and NMS cost almost nothing on this data (measured); its learned per-object confidence may improve RQ
+      (missed faint filaments, false blobs).
 - [ ] Optional: semi-supervised training on extra unlabeled GONG Hα images (external data allowed; no extra labels).
 - [ ] **Open question:** may filament **spines** in the annotation JSON be used as an extra training target? The rules forbid
       "other ground-truth metadata for training". Ask on the competition forum before using them.

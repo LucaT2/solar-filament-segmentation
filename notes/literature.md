@@ -24,9 +24,13 @@ Short summaries of prior work and what each implies for this competition. Each e
 **Ahmadzadeh et al. 2019, "Toward Filament Segmentation Using Deep Neural Networks", IEEE BigData** ([arXiv 1912.02743](https://arxiv.org/abs/1912.02743))
 - Mask R-CNN on 2048² BBSO images, trained on labels from a classical detection algorithm. This is the organizers'
   own earlier work.
-- *Implication:* the organizers know the instance-detection route. Its low-resolution mask head (28×28) is a poor
-  fit for thin, branchy shapes, which is one reason we prefer full-resolution semantic segmentation plus instance
-  grouping.
+- *Implication:* the organizers know the instance-detection route. I first assumed its low-resolution 28×28 mask head
+  would be a poor fit for thin filaments, but **measurement disagrees**:
+  - Ground-truth masks sent through a 28×28 head keep PQ 0.94 (filaments are small; median box 96 px).
+  - Annotator-vs-annotator PQ only drops from 0.340 to 0.338 when one side passes through the head.
+  - Box-overlap suppression (NMS) is no issue: only 1 filament pair has box IoU > 0.5.
+
+  Mask R-CNN remains a legitimate candidate (see "Why U-Net first" below).
 
 **Zhu et al. 2019, "Solar Filament Recognition Based on Deep Learning", *Solar Physics*** ([arXiv 1909.06580](https://arxiv.org/abs/1909.06580))
 - U-Net with dropout on BBSO images, trained on automatically generated, hand-corrected masks.
@@ -94,6 +98,25 @@ Short summaries of prior work and what each implies for this competition. Each e
 - Learned instance representations (star-convex polygons / gradient flows) for touching objects. StarDist's
   star-convexity fits elongated, curved filaments poorly. Cellpose flows handle arbitrary shapes but are more complex
   than we likely need.
+
+## Why U-Net first, and when Mask R-CNN
+
+Measured on our data (2026-10-03): Mask R-CNN's known weaknesses barely matter here (28×28 mask head: annotator PQ
+0.340 → 0.338; NMS affects 0.02% of filaments). Its main strength, separating touching objects, isn't needed either:
+filaments almost never touch, and connected components lose nothing (0.3399 → 0.3391).
+
+U-Net (semantic segmentation + connected components) comes first for practical reasons:
+- It works on full-resolution 2048² images by simple sliding-window tiling with stitched probabilities. Detectors
+  usually resize to about 1333 px or need instance merging across tile borders.
+- Dense per-pixel supervision gets the most out of 707 images, and strong pretrained encoders plug in directly
+  (`segmentation_models_pytorch`).
+- The probability threshold directly controls outline width, the most sensitive PQ knob.
+- It's simpler and faster, which helps the efficiency and code-quality parts of the judging.
+
+Mask R-CNN's potential advantage is **object-level reasoning**: a learned confidence per filament, and deciding from
+context what counts as one filament. That targets the weakest part of PQ, recognition (human RQ 0.54: missing faint
+filaments, merges, splits). It is therefore worth testing in Stage 5, either as a model of its own or as an ensemble
+partner. The cheaper hybrid is a U-Net plus a small classifier that rescores each connected component.
 
 ## Summary for our approach
 
