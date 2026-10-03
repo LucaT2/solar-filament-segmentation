@@ -7,7 +7,15 @@ Deadline: **2026-11-15 06:00 UTC** (Kaggle submissions + report + public repo vi
 
 The leaderboard metric is **Panoptic Quality (PQ)**. A predicted filament only counts as a true positive if its IoU with a
 ground-truth filament is **> 0.5**. Fragmenting a filament, merging two filaments, and leaving small false blobs are all
-penalized. Correct **instance grouping** matters as much as pixel accuracy.
+penalized (see [notes/competition_overview.md](notes/competition_overview.md)).
+
+Stage 1 ([notes/findings.md](notes/findings.md)) showed that true filaments almost never touch, so **instances =
+connected components of a good binary mask**. The real PQ levers are:
+1. **boundary precision** (±1 px of outline width changes PQ a lot; filaments are about 8 px wide),
+2. **connectivity** (predictions must not break a filament into pieces),
+3. **the confidence/size cut-off** for small, faint blobs.
+
+The human-vs-human score is **PQ 0.34**; a model predicting the annotators' consensus can beat it.
 
 **Model selection uses cross-validated PQ, not the public leaderboard.** The leaderboard covers only ~50% of the 180 test
 images, and the organizers have said some leaderboard scores are gamed.
@@ -59,14 +67,19 @@ images, and the organizers have said some leaderboard scores are gamed.
 - [ ] **Classical:** limb-darkening correction → adaptive threshold → morphology → connected components. A floor score and
       a comparison point for the report.
 - [ ] **Deep baseline:**
-  - U-Net (EfficientNet/ResNet34 encoder) for binary filament segmentation.
+  - U-Net (EfficientNet/ResNet34 encoder) for binary filament segmentation, **1 input channel** (grayscale).
+  - Per-image normalization; predictions outside the solar disk are masked (disk estimated per image).
+  - Every annotator-image is used as a separate training sample, as the organizers allow.
   - Trained on full-resolution 512–1024 crops; inference with an overlapping sliding window.
-  - Connected components + minimum-area filter → instances → RLE.
+  - Connected components (no linking of nearby pieces) + minimum-area filter → instances → RLE.
   - Threshold and minimum area tuned for PQ on out-of-fold predictions.
-- [ ] First Kaggle submission through the notebook.
+- [ ] First Kaggle submission (CSV upload).
 
 ## Stage 4 — Error analysis
 - [ ] Sort out-of-fold errors into buckets: false-positive blobs / missed filaments / fragmented / merged / IoU just below 0.5.
+      Use the same categories as the human-vs-human analysis so the model can be compared with human disagreement.
+- [ ] Break down by site (especially Mauna Loa), filament size, category and distance from the disk center.
+- [ ] Check whether predicted masks are systematically too thin or too wide (outline width is the most sensitive knob).
 - [ ] The largest bucket decides the Stage 5 priorities.
 
 ## Stage 5 — Main approach: precise, connected, consensus segmentation
@@ -94,6 +107,10 @@ head and watershed. The PQ levers are boundary precision (±1 px), connectivity,
 ---
 
 ## Kaggle notebook — `notebooks/kaggle_train_submit.ipynb`
+Kaggle itself only needs an uploaded CSV; this isn't a code competition. The notebook gives us free 16 GB GPUs and a
+single training → inference → submission run. It also becomes the basis for the **required** repo notebook that
+illustrates and reproduces the whole pipeline for the final judging.
+
 1. **Setup:** pip install + clone this repo from GitHub (or attach it as a Kaggle Dataset).
 2. **Data:** attach the competition data.
 3. **Train:** pick a config/fold, mixed-precision training on the 16 GB GPU, save weights to the notebook output.
