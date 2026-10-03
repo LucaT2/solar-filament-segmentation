@@ -33,14 +33,111 @@ solar physicists want filaments detected and outlined automatically.
 don't just mark "filament pixels", you say which pixels belong to which filament. In the first figure each color is a
 separate instance, and each counts separately in the score.
 
-**The scoring (Panoptic Quality).** For every annotator's labelling of an image:
-- A predicted filament counts as a hit if it overlaps a true filament with IoU above 0.5. IoU is the shared area
-  divided by the combined area.
-- The score is roughly the average IoU of the hits, reduced for every missed filament and every false filament:
-  PQ = Σ IoU(hits) / (|hits| + 0.5·|false| + 0.5·|missed|).
-- Splitting one filament into two pieces usually turns one hit into two misses. That's why fragmentation and merging
-  hurt so much.
-- On images with several annotators, the same prediction is scored separately against each annotator's set.
+**The scoring.** Submissions are ranked by Panoptic Quality (PQ), explained in detail in the next section.
+
+## How Panoptic Quality (PQ) is calculated
+
+The leaderboard metric comes from Kirillov et al., *Panoptic Segmentation* (CVPR 2019). The details below follow the
+organizers' official evaluation code (the self-evaluation notebook), which our `src/filament/metric.py` reproduces.
+
+### Step 1: IoU between every true and every predicted filament
+
+For a ground-truth filament *y* and a predicted filament *ŷ* (both binary masks):
+
+$$\mathrm{IoU}(y, \hat y) = \frac{|y \cap \hat y|}{|y \cup \hat y|}$$
+
+i.e. shared pixels divided by the pixels covered by either. For one image this gives a matrix with one row per true
+filament and one column per predicted filament.
+
+### Step 2: hits, false positives, misses
+
+- **True positive (TP):** any (true, predicted) pair with **IoU > 0.5**.
+- **False positive (FP):** a predicted filament with no TP partner.
+- **False negative (FN):** a true filament with no TP partner.
+
+### Step 3: combine over the whole test set
+
+$$\mathrm{PQ} = \frac{\sum_{(y,\hat y) \in TP} \mathrm{IoU}(y, \hat y)}{|TP| + \tfrac12 |FP| + \tfrac12 |FN|}$$
+
+TP, FP and FN are **pooled over all images first**, and PQ is computed once at the end. It is not an average of
+per-image scores.
+
+PQ factors into two easier-to-read parts:
+
+$$\mathrm{PQ} = \underbrace{\frac{\sum_{TP} \mathrm{IoU}}{|TP|}}_{\text{SQ: segmentation quality}} \times \underbrace{\frac{|TP|}{|TP| + \tfrac12|FP| + \tfrac12|FN|}}_{\text{RQ: recognition quality}}$$
+
+- **SQ** is the average IoU of the matched filaments: how well the outlines fit, ignoring misses. It is always above
+  0.5, because only matches with IoU > 0.5 count.
+- **RQ** is exactly the F1 score of detection: how well filaments are found, ignoring outline quality.
+
+### Worked example
+
+An image has 4 true filaments (A, B, C, D). The model predicts 5 objects:
+
+| prediction | best overlap | IoU | outcome |
+|---|---|---|---|
+| p1 | A | 0.72 | TP |
+| p2 | B | 0.61 | TP |
+| p3, p4 | C, broken into two halves | 0.40, 0.35 | both FP (neither half reaches 0.5) |
+| p5 | nothing | 0 | FP |
+| — | D, not predicted | — | FN |
+| — | C, no qualifying match | — | FN |
+
+TP = 2 (IoU sum 1.33), FP = 3, FN = 2:
+
+PQ = 1.33 / (2 + 1.5 + 1) = **0.296**, with SQ = 0.665 and RQ = 0.444.
+
+If C had been predicted as one piece with IoU 0.6, it would have been TP = 3, FP = 1, FN = 1:
+PQ = 1.93 / 4 = **0.483**. Fragmenting a single filament cost about 0.19.
+
+### Specifics of this competition's implementation
+
+1. **Scoring is per annotator-image.** Ground truth is grouped by `<annotator>-<stem>` (the part of `filament_id`
+   before `_`), and each annotator's set is scored separately against your predictions for that `<stem>`. An image with
+   3 annotators therefore counts 3 times, against 3 slightly different answers. The best prediction is the one the
+   annotators would agree on most, not one annotator's style.
+2. **No one-to-one matching step.** The original PQ assigns each true filament to at most one prediction. The official
+   code simply counts every pair with IoU > 0.5. For non-overlapping masks this is the same thing, because IoU > 0.5
+   makes a match unique: two disjoint predictions cannot both cover more than half of the same filament's union. Our
+   predictions come from connected components, which never overlap, so this never matters for us.
+3. **FP and FN cost the same** (½ each in the denominator). A spurious blob hurts exactly as much as a missed filament.
+4. **Predictions for images without ground truth are ignored.** Only the images in the hidden ground truth are scored.
+   Every test image is expected to have ground truth.
+5. **Empty predictions for an image** make all of that image's filaments FN.
+6. **Partial credit only above 0.5.** An IoU of 0.49 is worth nothing *and* adds an FP plus an FN. An IoU of 0.51 is
+   worth 0.51. The score is therefore very sensitive to masks hovering around the threshold.
+7. **Public vs private:** the public leaderboard is computed on about 50% of the 180 test images. The rest decides the
+   private ranking, which the organizers alone see.
+
+### Submission format
+
+A CSV with one row per predicted filament:
+
+```
+filament_id,segmentation_rle
+20150125172714Mh_1,<RLE counts>
+20150125172714Mh_2,<RLE counts>
+```
+
+- `filament_id` is the image stem plus any unique suffix.
+- `segmentation_rle` is the COCO compressed RLE *counts* string only (from `pycocotools.mask.encode`), without quotes.
+  The size is fixed at 2048×2048.
+
+### What this means for our models
+
+- **Fragmentation and merging are expensive.** One filament split into two sub-0.5 pieces turns 1 TP into 2 FP + 1 FN;
+  two filaments merged into one prediction usually give 1 FP + 2 FN. Connectivity matters more than in plain Dice.
+- **Thin shapes are fragile.** Filaments are about 8 px wide, so a 1 px change in outline width changes IoU a lot.
+  Shrinking another annotator's masks by 1 px lowers their PQ against the others from 0.34 to 0.28 (see
+  [findings.md](findings.md)). The mask threshold must be tuned on validation PQ.
+- **When to keep an uncertain blob.** Adding a prediction that matches with probability *p* at IoU *q* raises the
+  expected PQ roughly when *p · q > ½ · PQ*. At PQ ≈ 0.4 and typical IoU ≈ 0.65, a blob is worth keeping if it is a real
+  match more than about 30% of the time. This is the logic behind tuning a minimum size and confidence for components.
+- **Human reference point:** annotators scored against each other reach PQ 0.34 (SQ 0.63, RQ 0.54). The organizers
+  call anything above 0.35 valuable.
+
+The final judging also reports Dice and IoU distributions and 1:n / n:1 match counts (70% quantitative, 30%
+qualitative), but the leaderboard ranking uses PQ only.
 
 ## The input
 
