@@ -20,10 +20,11 @@ images, and the organizers have said some leaderboard scores are gamed.
 ---
 
 ## Stage 0 — Setup
-- [ ] Python 3.12 venv. PyTorch with CUDA ≥ 12.8 (needed for Blackwell), `segmentation_models_pytorch`, `timm`,
+- [x] Python 3.12 venv. PyTorch with CUDA ≥ 12.8 (needed for Blackwell), `segmentation_models_pytorch`, `timm`,
       `albumentations`, `pycocotools`, `opencv-python`, `scikit-image`. Pinned `requirements.txt`.
+      *(torch 2.11.0+cu128 on RTX 5070 sm_120 verified; `scripts/check_env.py` passes.)*
 - [x] Git repo + GitHub remote (private now, public at the deadline).
-- [ ] Code layout:
+- [x] Code layout:
   - `src/filament/`: data, preprocess, rle, metric, models, postprocess, train, infer
   - `configs/*.yaml`: one config per experiment
   - `scripts/`: CLI entry points
