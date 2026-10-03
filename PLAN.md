@@ -31,24 +31,25 @@ images, and the organizers have said some leaderboard scores are gamed.
   - `notebooks/`: EDA + Kaggle train/submit notebook
 
 ## Stage 1 — Understand the problem (data analysis + literature)
-- [ ] **Annotator agreement ceiling:** PQ between annotators on the 296 multi-annotated training images. This is the
-      realistic upper bound.
-- [ ] **Instance definition:** do GT instances touch? Do annotators group nearby fragments into one outline? How tight are
-      the outlines relative to the dark pixels?
-- [ ] **Image properties:** limb darkening, per-site (B/C/L/M/T/U) differences, noise and clouds; filament location, size
-      and shape statistics.
-- [ ] **Leakage / splits:** train vs test date overlap. Folds grouped by date.
-- [ ] **Literature review**, with a short note on what each source implies:
-  - MAGFiLO paper (Ahmadzadeh et al. 2024, *Sci. Data*, doi 10.1038/s41597-024-03876-y)
-  - Prior filament segmentation (Mask R-CNN, U-Net, semi-supervised H-alpha detection)
-  - Thin/elongated structure segmentation (vessels, roads, clDice)
-- [ ] Deliverables: `notebooks/01_eda.ipynb` + `notes/findings.md`.
+- [x] **Annotator agreement ceiling:** PQ between annotators on the 296 multi-annotated training images.
+      → **human vs human PQ = 0.340** (SQ 0.63, RQ 0.54).
+- [x] **Instance definition:** do GT instances touch? → almost never (5 overlapping pairs out of 8,199 filaments). Connected
+      components on the union mask lose nothing (PQ 0.3399 → 0.3391). Outline width must be accurate to about 1 px
+      (−1 px costs 18% of PQ).
+- [x] **Image properties:** residual limb darkening beyond about 0.5 R, disk radius and center vary per site, Mauna Loa
+      is blurry and low-contrast, filaments are only about 12% darker than their surroundings.
+- [x] **Leakage / splits:** test images are as close in time to train as train images are to each other → folds
+      grouped by image stem match the test conditions.
+- [x] **Literature review** → [notes/literature.md](notes/literature.md).
+- [x] Deliverables: [notebooks/01_eda.ipynb](notebooks/01_eda.ipynb) + [notes/findings.md](notes/findings.md).
 
 ## Stage 2 — Validation harness (before any model)
 - [ ] Exact reimplementation of the official PQ (from `self-evaluation-notebook.ipynb`), plus Dice/IoU distributions and
-      1:n / n:1 counts.
+      1:n / n:1 counts. *(Fast RLE-based version already in `src/filament/metric.py`; still to do: an equivalence
+      test against the official dense implementation.)*
 - [ ] RLE encode/decode round-trip tests. GT written as a submission must score PQ = 1.0.
-- [ ] 5-fold grouped cross-validation (by date).
+- [ ] 5-fold cross-validation grouped by image stem, stratified by site and annotator count (Stage 1 showed this
+      matches the train→test time structure).
 - [ ] Multi-annotator ground truth: replicate the official scoring. GT is grouped per **annotator-image**
       (`<prefix>-<stem>`), and each annotator's set is scored separately against the single prediction for that
       image, so multi-annotated images count 2–3×. Folds are grouped by image stem so one image never appears in
@@ -68,14 +69,18 @@ images, and the organizers have said some leaderboard scores are gamed.
 - [ ] Sort out-of-fold errors into buckets: false-positive blobs / missed filaments / fragmented / merged / IoU just below 0.5.
 - [ ] The largest bucket decides the Stage 5 priorities.
 
-## Stage 5 — Main approach: segmentation + instance-boundary learning
-- [ ] **Stronger high-resolution model:** U-Net++ / UPerNet with a ConvNeXt or EfficientNetV2 encoder.
-- [ ] **Multi-task outputs:** filament mask + boundary/contact map + distance-transform map, combined by marker-based
-      watershed to split touching filaments and keep each filament's pieces together.
-- [ ] **Annotator-aware training:** pick a random annotator per sample each epoch, or use averaged soft targets.
-- [ ] **Losses:** BCE + Dice, optionally clDice for continuity.
-- [ ] **Learned fragment-merging step:** a classifier on neighbouring predicted pieces (gap, orientation, confidence).
-- [ ] Alternative, only if analysis shows many touching instances: an instance segmentation model (Mask2Former / Mask R-CNN).
+## Stage 5 — Main approach: precise, connected, consensus segmentation
+*Revised after Stage 1: GT instances almost never touch, so connected components replace the planned instance
+head and watershed. The PQ levers are boundary precision (±1 px), connectivity, and the confidence/size cut-off.*
+- [ ] **Stronger full-resolution model:** U-Net++ / UPerNet with a ConvNeXt or EfficientNetV2 encoder. No more than 2×
+      downsampling.
+- [ ] **Consensus training:** pick a random annotator per sample each epoch vs. averaged soft targets on
+      multi-annotated images. The model should learn the annotators' consensus, which can beat the human-vs-human 0.34.
+- [ ] **Losses:** BCE + Dice + **Skeleton Recall** (cheap connectivity loss, so filaments don't break at thin necks).
+- [ ] **Input:** limb flattening or a radial channel, disk mask, blur and contrast augmentation (Mauna Loa).
+- [ ] **Post-processing tuned on CV PQ:** probability threshold (≈ outline width), minimum area, per-component
+      confidence cut-off, optional gap-closing only if Stage 4 shows predicted fragmentation.
+- [ ] Optional: semi-supervised training on extra unlabeled GONG Hα images (external data allowed; no extra labels).
 - [ ] **Open question:** may filament **spines** in the annotation JSON be used as an extra training target? The rules forbid
       "other ground-truth metadata for training". Ask on the competition forum before using them.
 
