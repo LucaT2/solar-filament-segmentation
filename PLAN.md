@@ -49,8 +49,10 @@ images, and the organizers have said some leaderboard scores are gamed.
       1:n / n:1 counts.
 - [ ] RLE encode/decode round-trip tests. GT written as a submission must score PQ = 1.0.
 - [ ] 5-fold grouped cross-validation (by date).
-- [ ] Policy for multi-annotator ground truth in validation (one annotator chosen at random vs averaged over annotators),
-      decided after Stage 1.
+- [ ] Multi-annotator ground truth: replicate the official scoring. GT is grouped per **annotator-image**
+      (`<prefix>-<stem>`), and each annotator's set is scored separately against the single prediction for that
+      image, so multi-annotated images count 2–3×. Folds are grouped by image stem so one image never appears in
+      both train and validation under different annotators.
 
 ## Stage 3 — Baselines
 - [ ] **Classical:** limb-darkening correction → adaptive threshold → morphology → connected components. A floor score and
