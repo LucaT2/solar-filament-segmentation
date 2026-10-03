@@ -1,0 +1,36 @@
+# Competition data and saved web pages (not redistributable / large)
+filament-segmentation-2026/
+*.zip
+Solar Filament Segmentation Challenge 2026 _ Kaggle.html
+Solar Filament Segmentation Challenge 2026 _ Kaggle_files/
+
+# Credentials
+kaggle.json
+access_token
+
+# Training outputs
+outputs/
+checkpoints/
+runs/
+wandb/
+*.pth
+*.pt
+*.ckpt
+submission*.csv
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Organizer's notebook (kept locally for reference)
+self-evaluation-notebook.ipynb
