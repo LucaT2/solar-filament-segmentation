@@ -18,54 +18,20 @@ import pandas as pd
 
 from filament.evaluation import GroundTruth, load_prob
 from filament.postprocess import PostConfig, find_components
-from filament.preprocess import disk_mask, find_disk, read_image
+from filament.preprocess import find_disk, read_image
+from filament.rescoring import FEATURES, component_table, feature_matrix, oof_probabilities
 
 OUTCOMES = ["match", "low_iou", "missing", "split", "merged"]
-
-
-def _component_shape(labels: np.ndarray, n: int) -> pd.DataFrame:
-    """Per-component elongation and bbox from contours (cheap for a few hundred components)."""
-    from scipy.ndimage import find_objects
-
-    rows = []
-    for i, sl in enumerate(find_objects(labels, max_label=n), start=1):
-        crop = (labels[sl] == i).astype(np.uint8)
-        ys, xs = np.nonzero(crop)
-        pts = cv2.findNonZero(crop)
-        (_, _), (rw, rh), _ = cv2.minAreaRect(pts) if len(xs) > 2 else ((0, 0), (1, 1), 0)
-        rows.append({"cx": sl[1].start + xs.mean(), "cy": sl[0].start + ys.mean(), "length": max(rw, rh),
-                     "elongation": max(rw, rh) / max(min(rw, rh), 1.0),
-                     "y0": sl[0].start, "y1": sl[0].stop, "x0": sl[1].start, "x1": sl[1].stop})
-    return pd.DataFrame(rows, index=np.arange(1, n + 1))
-
-
-def _contrast(img: np.ndarray, labels: np.ndarray, ids: np.ndarray, ring: int = 15) -> dict[int, float]:
-    """Relative darkness of each component vs a ring around it: (ring - inside) / ring (median intensities)."""
-    out = {}
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * ring + 1, 2 * ring + 1))
-    any_fg = labels > 0
-    for i in ids:
-        ys, xs = np.nonzero(labels == i)
-        y0, y1, x0, x1 = max(ys.min() - ring, 0), ys.max() + ring + 1, max(xs.min() - ring, 0), xs.max() + ring + 1
-        m = labels[y0:y1, x0:x1] == i
-        around = cv2.dilate(m.astype(np.uint8), kernel).astype(bool) & ~any_fg[y0:y1, x0:x1]
-        crop = img[y0:y1, x0:x1]
-        bg = float(np.median(crop[around])) if around.any() else np.nan
-        out[int(i)] = (bg - float(np.median(crop[m]))) / max(bg, 1.0) if around.any() else np.nan
-    return out
 
 
 def analyze_image(stem: str, prob: np.ndarray, img: np.ndarray, gt: GroundTruth, cfg: PostConfig,
                   ann_meta: pd.DataFrame) -> tuple[list[dict], list[dict]]:
     disk = find_disk(img)
-    region = disk_mask(prob.shape, disk, cfg.disk_scale) if cfg.disk_scale > 0 else None
-    comps = find_components(prob, cfg.threshold, region)
+    comps, table = component_table(stem, prob, img, cfg, disk)  # same features as the production rescorer
     n = comps.n
-    kept = set(comps.keep(cfg.min_area, cfg.min_score).tolist())
+    kept = set(table.comp[table.kept].tolist())
     flat = comps.labels.ravel()
     pflat = prob.ravel()
-    shape = _component_shape(comps.labels, n) if n else pd.DataFrame()
-    contrast = _contrast(img, comps.labels, np.arange(1, n + 1)) if n else {}
 
     gt_rows: list[dict] = []
     best_iou_any = np.zeros(n + 1)  # best IoU of each component with any annotator's filament
@@ -108,18 +74,14 @@ def analyze_image(stem: str, prob: np.ndarray, img: np.ndarray, gt: GroundTruth,
                 "y0": int(ys.min()), "y1": int(ys.max()) + 1, "x0": int(xs.min()), "x1": int(xs.max()) + 1,
             })
 
-    pred_rows = []
-    for i in range(1, n + 1):
-        pred_rows.append({
-            "stem": stem, "comp": i, "n_annotators": n_ann, "area": int(comps.area[i]),
-            "mean_prob": float(comps.mean_prob[i]), "kept": i in kept, "best_iou_any": float(best_iou_any[i]),
-            "matched_any": bool(matched_by[i] > 0), "matched_share": matched_by[i] / n_ann,
-            "overlaps_any": bool(overlaps_any[i]), "contrast": contrast.get(i, np.nan),
-            "length": shape.loc[i, "length"], "elongation": shape.loc[i, "elongation"],
-            "r_norm": float(np.hypot(shape.loc[i, "cx"] - disk.cx, shape.loc[i, "cy"] - disk.cy) / disk.radius),
-            **{k: int(shape.loc[i, k]) for k in ("y0", "y1", "x0", "x1")},
-        })
-    return gt_rows, pred_rows
+    table = table.drop(columns=["site"], errors="ignore").assign(
+        n_annotators=n_ann,
+        best_iou_any=best_iou_any[1:],
+        matched_any=matched_by[1:] > 0,
+        matched_share=matched_by[1:] / n_ann,
+        overlaps_any=overlaps_any[1:],
+    )
+    return gt_rows, table.to_dict("records")
 
 
 def build_tables(prob_dir, image_dir, ann: pd.DataFrame, stems, cfg: PostConfig) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -172,29 +134,12 @@ def pq_variant(prob_dir, image_dir, gt: GroundTruth, cfg: PostConfig, morph_px: 
     return score_images(images)
 
 
-FEATURES = ["log_area", "mean_prob", "contrast", "elongation", "length", "r_norm", "site_code"]
+component_features = feature_matrix  # kept for the notebook
 
 
-def component_features(pred: pd.DataFrame) -> pd.DataFrame:
-    x = pred.copy()
-    x["log_area"] = np.log10(x.area)
-    x["site_code"] = x.site.map({s: i for i, s in enumerate("BCLMTU")})
-    return x[FEATURES]
-
-
-def rescoring_oof(pred: pd.DataFrame, n_splits: int = 5, seed: int = 0) -> np.ndarray:
-    """Out-of-fold P(component matches at least one annotator) from a gradient-boosted classifier, grouped by image
-    so a component is never scored by a model trained on its own image."""
-    from sklearn.ensemble import HistGradientBoostingClassifier
-    from sklearn.model_selection import GroupKFold
-
-    x, y, groups = component_features(pred), pred.matched_any.astype(int).to_numpy(), pred.stem.to_numpy()
-    p = np.zeros(len(pred))
-    for tr, va in GroupKFold(n_splits).split(x, y, groups):
-        clf = HistGradientBoostingClassifier(max_iter=200, learning_rate=0.05, max_leaf_nodes=15, random_state=seed)
-        clf.fit(x.iloc[tr], y[tr])
-        p[va] = clf.predict_proba(x.iloc[va])[:, 1]
-    return p
+def rescoring_oof(pred: pd.DataFrame, n_splits: int = 5) -> np.ndarray:
+    """Out-of-fold P(component matches at least one annotator), grouped by image."""
+    return oof_probabilities(pred, pred.matched_any.astype(int).to_numpy(), pred.stem.to_numpy(), n_splits)
 
 
 def pred_category(pred: pd.DataFrame) -> pd.Series:

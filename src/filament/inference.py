@@ -19,12 +19,22 @@ def save_prob(prob_dir: Path, stem: str, prob) -> None:
     cv2.imwrite(str(prob_dir / f"{stem}.png"), prob_to_uint8(prob))
 
 
-def probs_to_submission(prob_dir, stems, cfg: PostConfig, image_dir) -> pd.DataFrame:
-    """Post-process cached probability maps of ``stems`` into a submission DataFrame."""
+def probs_to_submission(prob_dir, stems, cfg: PostConfig, image_dir, rescorer=None) -> pd.DataFrame:
+    """Post-process cached probability maps of ``stems`` into a submission DataFrame.
+
+    With a ``filament.rescoring.Rescorer``, components must also pass its P(match) cut-off.
+    """
+    from filament.preprocess import read_image
+    from filament.rescoring import component_table
+
     preds, disks = {}, {}
     for stem in stems:
         prob = load_prob(prob_dir, stem)
-        preds[stem] = instances(prob, cfg, region_for(stem, image_dir, cfg.disk_scale, disks))
+        if rescorer is None:
+            preds[stem] = instances(prob, cfg, region_for(stem, image_dir, cfg.disk_scale, disks))
+        else:
+            comps, table = component_table(stem, prob, read_image(Path(image_dir) / f"{stem}.jpeg"), cfg)
+            preds[stem] = [comps.labels == i for i in rescorer.keep_ids(table)]
     return build_submission(preds)
 
 

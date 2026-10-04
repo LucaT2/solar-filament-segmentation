@@ -53,6 +53,25 @@ def test_link_keeps_original_pixels():
     assert linked.area[1] == unlinked.area[1:].sum()  # gap pixels are not added to the instance
 
 
+def test_component_table_handles_empty_and_normal_maps():
+    from filament.preprocess import Disk
+    from filament.rescoring import Rescorer, component_table
+
+    img = np.full((2048, 2048), 130, np.uint8)
+    disk = Disk(1024.0, 1024.0, 950.0)
+    comps, table = component_table("20110120105534Ch", np.zeros((2048, 2048), np.float32), img, PostConfig(0.5), disk)
+    assert comps.n == 0 and len(table) == 0
+    assert len(Rescorer(None, 0.3).keep_ids(table)) == 0
+
+    prob = np.zeros((2048, 2048), np.float32)
+    prob[1000:1010, 900:1100] = 0.9
+    img[1000:1010, 900:1100] = 100
+    comps, table = component_table("20110120105534Ch", prob, img, PostConfig(0.5, 100), disk)
+    row = table.iloc[0]
+    assert (comps.n, row.area, bool(row.kept), row.site) == (1, 2000, True, "C")
+    assert row.contrast == pytest.approx(30 / 130) and row.elongation > 15
+
+
 def test_component_stats():
     prob = np.zeros((2048, 2048), np.float32)
     prob[10:20, 10:20] = 0.8

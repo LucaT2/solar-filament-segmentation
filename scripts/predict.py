@@ -1,9 +1,13 @@
-"""Predict probability maps for the test images with the trained fold models (averaged), optionally with flip TTA.
+"""Predict probability maps with the trained fold models, optionally with flip TTA.
 
-Writes outputs/<exp>/test/<stem>.png; then run scripts/make_submission.py --exp <exp>.
+--split test (default): every test image, averaged over all selected fold models -> outputs/<exp>/test/
+--split oof:            each fold model predicts its own validation images        -> outputs/<exp>/oof/
+                        (use the same --tta setting as for test, so OOF-tuned post-processing and the
+                        component rescorer see identically produced maps)
 
 Usage:
-    python scripts/predict.py --exp unet_r34                 # all fold*.pt found in outputs/unet_r34
+    python scripts/predict.py --exp unet_r34 --tta                 # test, all fold*.pt in outputs/unet_r34
+    python scripts/predict.py --exp unet_r34 --tta --split oof
     python scripts/predict.py --exp unet_r34 --folds 0 1 --tta
 """
 
@@ -16,6 +20,7 @@ import torch
 from tqdm import tqdm
 
 from filament.dataset import image_info, normalize_with
+from filament.folds import load_folds
 from filament.inference import save_prob
 from filament.model import build_model, predict_full
 from filament.paths import get_data_paths, get_output_dir
@@ -45,21 +50,34 @@ def main() -> None:
     parser.add_argument("--exp", required=True)
     parser.add_argument("--folds", type=int, nargs="*")
     parser.add_argument("--tta", action="store_true", help="average over 4 flips")
+    parser.add_argument("--split", choices=["test", "oof"], default="test")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     paths = get_data_paths()
     exp_dir = get_output_dir(args.exp)
-    models, cfg = load_models(exp_dir, args.folds, device)
-    dtype = amp_dtype(cfg.get("amp", "fp16"))
 
-    t0 = time.time()
-    images = sorted(paths.test_images.glob("*.jpeg"))
-    for path in tqdm(images, desc="test"):
-        info = image_info(path)
-        prob = predict_full(models, normalize_with(read_image(path), info), device, tta=args.tta, amp_dtype=dtype)
-        save_prob(exp_dir / "test", path.stem, prob)
-    print(f"{len(images)} test maps in {time.time() - t0:.0f}s -> {exp_dir / 'test'}")
+    if args.split == "test":
+        models, cfg = load_models(exp_dir, args.folds, device)
+        jobs = [(models, sorted(paths.test_images.glob("*.jpeg")), cfg)]
+    else:
+        folds = load_folds()
+        fold_ids = args.folds if args.folds is not None else sorted(
+            int(p.stem[4:]) for p in exp_dir.glob("fold*.pt"))
+        jobs = []
+        for k in fold_ids:
+            models, cfg = load_models(exp_dir, [k], device)
+            jobs.append((models, [paths.train_images / f"{s}.jpeg" for s in folds.stem[folds.fold == k]], cfg))
+
+    t0, n = time.time(), 0
+    for models, images, cfg in jobs:
+        dtype = amp_dtype(cfg.get("amp", "fp16"))
+        for path in tqdm(images, desc=args.split):
+            info = image_info(path)
+            prob = predict_full(models, normalize_with(read_image(path), info), device, tta=args.tta, amp_dtype=dtype)
+            save_prob(exp_dir / args.split, path.stem, prob)
+        n += len(images)
+    print(f"{n} {args.split} maps (tta={args.tta}) in {time.time() - t0:.0f}s -> {exp_dir / args.split}")
 
 
 if __name__ == "__main__":
