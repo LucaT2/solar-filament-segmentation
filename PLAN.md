@@ -1,4 +1,4 @@
-﻿# Solar Filament Segmentation Challenge 2026 â€” Plan
+# Solar Filament Segmentation Challenge 2026 — Plan
 
 Competition: https://www.kaggle.com/competitions/filament-segmentation-2026
 Deadline: **2026-11-15 06:00 UTC** (Kaggle submissions + report + public repo via Google form)
@@ -11,7 +11,7 @@ penalized (see [notes/competition_overview.md](notes/competition_overview.md)).
 
 Stage 1 ([notes/findings.md](notes/findings.md)) showed that true filaments almost never touch, so **instances =
 connected components of a good binary mask**. The real PQ levers are:
-1. **boundary precision** (Â±1 px of outline width changes PQ a lot; filaments are about 8 px wide),
+1. **boundary precision** (±1 px of outline width changes PQ a lot; filaments are about 8 px wide),
 2. **connectivity** (predictions must not break a filament into pieces),
 3. **the confidence/size cut-off** for small, faint blobs.
 
@@ -27,8 +27,8 @@ images, and the organizers have said some leaderboard scores are gamed.
 
 ---
 
-## Stage 0 â€” Setup
-- [x] Python 3.12 venv. PyTorch with CUDA â‰¥ 12.8 (needed for Blackwell), `segmentation_models_pytorch`, `timm`,
+## Stage 0 — Setup
+- [x] Python 3.12 venv. PyTorch with CUDA ≥ 12.8 (needed for Blackwell), `segmentation_models_pytorch`, `timm`,
       `albumentations`, `pycocotools`, `opencv-python`, `scikit-image`. Pinned `requirements.txt`.
       *(torch 2.11.0+cu128 on RTX 5070 sm_120 verified; `scripts/check_env.py` passes.)*
 - [x] Git repo + GitHub remote (private now, public at the deadline).
@@ -38,97 +38,97 @@ images, and the organizers have said some leaderboard scores are gamed.
   - `scripts/`: CLI entry points
   - `notebooks/`: EDA + Kaggle train/submit notebook
 
-## Stage 1 â€” Understand the problem (data analysis + literature)
+## Stage 1 — Understand the problem (data analysis + literature)
 - [x] **Annotator agreement ceiling:** PQ between annotators on the 296 multi-annotated training images.
-      â†’ **human vs human PQ = 0.340** (SQ 0.63, RQ 0.54).
-- [x] **Instance definition:** do GT instances touch? â†’ almost never (5 overlapping pairs out of 8,199 filaments). Connected
-      components on the union mask lose nothing (PQ 0.3399 â†’ 0.3391). Outline width must be accurate to about 1 px
-      (âˆ’1 px costs 18% of PQ).
+      → **human vs human PQ = 0.340** (SQ 0.63, RQ 0.54).
+- [x] **Instance definition:** do GT instances touch? → almost never (5 overlapping pairs out of 8,199 filaments). Connected
+      components on the union mask lose nothing (PQ 0.3399 → 0.3391). Outline width must be accurate to about 1 px
+      (−1 px costs 18% of PQ).
 - [x] **Image properties:** residual limb darkening beyond about 0.5 R, disk radius and center vary per site, Mauna Loa
       is blurry and low-contrast, filaments are only about 12% darker than their surroundings.
-- [x] **Leakage / splits:** test images are as close in time to train as train images are to each other â†’ folds
+- [x] **Leakage / splits:** test images are as close in time to train as train images are to each other → folds
       grouped by image stem match the test conditions.
-- [x] **Literature review** â†’ [notes/literature.md](notes/literature.md).
+- [x] **Literature review** → [notes/literature.md](notes/literature.md).
 - [x] Deliverables: [notebooks/01_eda.ipynb](notebooks/01_eda.ipynb) + [notes/findings.md](notes/findings.md).
 
-## Stage 2 â€” Validation harness (before any model)
+## Stage 2 — Validation harness (before any model)
 - [x] Exact reimplementation of the official PQ, plus Dice/IoU distributions and 1:n / n:1 counts
       (`src/filament/metric.py`). `tests/test_metric.py` checks it against the organizers' own functions, loaded from
       their notebook, on deliberately damaged predictions (wider/thinner, shifted, dropped, split, merged, duplicated,
       false blobs, empty images, unknown images): **identical PQ and IoU matrices**.
 - [x] RLE round-trip tests; GT written through the submission writer and read back scores PQ = 1.0
       (`tests/test_rle_submission.py`). Submission writer and validator in `src/filament/submission.py`.
-- [x] 5-fold cross-validation grouped by image stem, stratified by site Ã— annotator count â†’
+- [x] 5-fold cross-validation grouped by image stem, stratified by site × annotator count →
       [configs/folds.csv](configs/folds.csv) (`scripts/make_folds.py`, guarded by `tests/test_folds.py`).
 - [x] Multi-annotator ground truth scored per **annotator-image**, exactly like the official metric.
-- [x] OOF evaluator: `python scripts/evaluate.py --pred <csv> [--fold k]` â†’ PQ/SQ/RQ, overlap and split/merge rates,
+- [x] OOF evaluator: `python scripts/evaluate.py --pred <csv> [--fold k]` → PQ/SQ/RQ, overlap and split/merge rates,
       breakdowns by site, annotator count and fold.
 - **Noise level:** human-vs-human PQ ranges from 0.316 to 0.385 across folds. Compare models on 5-fold OOF PQ, not on
       single folds or the about 90-image public leaderboard.
 
-## Stage 3 â€” Baselines
-- [x] **Classical:** local darkness vs a 101 px median background â†’ threshold â†’ connected components â†’ size and
+## Stage 3 — Baselines
+- [x] **Classical:** local darkness vs a 101 px median background → threshold → connected components → size and
       confidence filters. **OOF PQ 0.183** (all 707 images). Mostly false positives (49% of blobs unmatched: fibrils,
       sunspots), 31% of filaments missed, 13% split.
 - [ ] **Deep baseline:**
   - U-Net (EfficientNet/ResNet34 encoder) for binary filament segmentation, **1 input channel** (grayscale).
   - Per-image normalization; predictions outside the solar disk are masked (disk estimated per image).
   - Every annotator-image is used as a separate training sample, as the organizers allow.
-  - Trained on full-resolution 512â€“1024 crops; inference with an overlapping sliding window.
-  - Connected components (no linking of nearby pieces) + minimum-area filter â†’ instances â†’ RLE.
+  - Trained on full-resolution 512–1024 crops; inference with an overlapping sliding window.
+  - Connected components (no linking of nearby pieces) + minimum-area filter → instances → RLE.
   - Threshold and minimum area tuned for PQ on out-of-fold predictions.
   - [x] Pipeline built: `scripts/train.py` / `predict.py` / `tune_postprocess.py` / `make_submission.py`,
         config `configs/unet_r34.yaml`, Kaggle notebook `notebooks/kaggle_train_submit.ipynb`.
   - [x] Fold 0 trained locally (RTX 5070 laptop, ~40 min): **PQ 0.391** after tuning. On fold 0's multi-annotated
-        images: model â‰ˆ 0.38 vs human 0.328.
-  - [ ] Folds 1â€“4 (Kaggle notebook or locally, ~40 min each) â†’ full 5-fold OOF PQ and a 5-model ensemble.
+        images: model ≈ 0.38 vs human 0.328.
+  - [ ] Folds 1–4 (Kaggle notebook or locally, ~40 min each) → full 5-fold OOF PQ and a 5-model ensemble.
 - [ ] First Kaggle submission (CSV upload). *(Ready: `outputs/unet_r34/submission.csv` from the fold-0 model + flip
       TTA.)*
 
-## Stage 4 â€” Error analysis
+## Stage 4 — Error analysis
 - [ ] Sort out-of-fold errors into buckets: false-positive blobs / missed filaments / fragmented / merged / IoU just below 0.5.
       Use the same categories as the human-vs-human analysis so the model can be compared with human disagreement.
 - [ ] Break down by site (especially Mauna Loa), filament size, category and distance from the disk center.
 - [ ] Check whether predicted masks are systematically too thin or too wide (outline width is the most sensitive knob).
 - [ ] The largest bucket decides the Stage 5 priorities.
 
-## Stage 5 â€” Main approach: precise, connected, consensus segmentation
+## Stage 5 — Main approach: precise, connected, consensus segmentation
 *Revised after Stage 1: GT instances almost never touch, so connected components replace the planned instance
-head and watershed. The PQ levers are boundary precision (Â±1 px), connectivity, and the confidence/size cut-off.*
-- [ ] **Stronger full-resolution model:** U-Net++ / UPerNet with a ConvNeXt or EfficientNetV2 encoder. No more than 2Ã—
+head and watershed. The PQ levers are boundary precision (±1 px), connectivity, and the confidence/size cut-off.*
+- [ ] **Stronger full-resolution model:** U-Net++ / UPerNet with a ConvNeXt or EfficientNetV2 encoder. No more than 2×
       downsampling.
 - [ ] **Consensus training:** pick a random annotator per sample each epoch vs. averaged soft targets on
       multi-annotated images. The model should learn the annotators' consensus, which can beat the human-vs-human 0.34.
 - [ ] **Losses:** BCE + Dice + **Skeleton Recall** (cheap connectivity loss, so filaments don't break at thin necks).
 - [ ] **Input:** limb flattening or a radial channel, disk mask, blur and contrast augmentation (Mauna Loa).
-- [ ] **Post-processing tuned on CV PQ:** probability threshold (â‰ˆ outline width), minimum area, per-component
+- [ ] **Post-processing tuned on CV PQ:** probability threshold (≈ outline width), minimum area, per-component
       confidence cut-off, optional gap-closing only if Stage 4 shows predicted fragmentation.
 - [ ] **Object-level scoring:** compare (a) a small classifier that rescores each U-Net connected component vs.
-      (b) Mask R-CNN (torchvision, full resolution) as a separate model or ensemble partner. Mask R-CNN's 28Ã—28 mask
+      (b) Mask R-CNN (torchvision, full resolution) as a separate model or ensemble partner. Mask R-CNN's 28×28 mask
       head and NMS cost almost nothing on this data (measured); its learned per-object confidence may improve RQ
       (missed faint filaments, false blobs).
-- [ ] Optional: semi-supervised training on extra unlabeled GONG HÎ± images (external data allowed; no extra labels).
+- [ ] Optional: semi-supervised training on extra unlabeled GONG Hα images (external data allowed; no extra labels).
 - [ ] **Open question:** may filament **spines** in the annotation JSON be used as an extra training target? The rules forbid
       "other ground-truth metadata for training". Ask on the competition forum before using them.
 
-## Stage 6 â€” Polish and final deliverables
+## Stage 6 — Polish and final deliverables
 - [ ] Combine fold models + flip/rotation averaging at test time (TTA). Re-tune post-processing on out-of-fold predictions.
 - [ ] Watch inference time (computational efficiency is judged).
 - [ ] Repo cleanup: docs, modular code, pinned `requirements.txt`, reproducible end-to-end notebook.
-- [ ] 4-page technical report (Overleaf template) â†’ PDF.
+- [ ] 4-page technical report (Overleaf template) → PDF.
 - [ ] Google form submission before Nov 15; repo public until winners are announced (Nov 30).
 
 ---
 
-## Kaggle notebook â€” `notebooks/kaggle_train_submit.ipynb`
+## Kaggle notebook — `notebooks/kaggle_train_submit.ipynb`
 Kaggle itself only needs an uploaded CSV; this isn't a code competition. The notebook gives us free 16 GB GPUs and a
-single training â†’ inference â†’ submission run. It also becomes the basis for the **required** repo notebook that
+single training → inference → submission run. It also becomes the basis for the **required** repo notebook that
 illustrates and reproduces the whole pipeline for the final judging.
 
 1. **Setup:** pip install + clone this repo from GitHub (or attach it as a Kaggle Dataset).
 2. **Data:** attach the competition data.
 3. **Train:** pick a config/fold, mixed-precision training on the 16 GB GPU, save weights to the notebook output.
-4. **Infer:** sliding window + TTA + post-processing on `test/test_images` â†’ `submission.csv`.
+4. **Infer:** sliding window + TTA + post-processing on `test/test_images` → `submission.csv`.
 5. **Validate** the CSV by decoding it back, then submit (download, or `kaggle competitions submit`).
 
 All logic lives in `src/`, so the notebook stays short and matches local runs.
@@ -137,8 +137,8 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 
 | Date | Experiment | CV PQ | Public LB | Notes |
 |------|------------|-------|-----------|-------|
-| 2026-10-04 | Reference: one annotator vs the others (multi-annotated images only) | 0.340 | â€“ | SQ 0.633, RQ 0.537; per fold 0.316â€“0.385; worst sites U 0.304, M 0.314 |
-| 2026-10-04 | Classical darkness detector (thr 0.2, min area 500, min mean 0.4) | 0.183 | â€“ | all 707 images; FP-dominated (RQ 0.28) |
-| 2026-10-04 | U-Net ResNet34, 512 crops, BCE+Dice, 30 ep Ã— 4000 crops, **fold 0 only** (thr 0.5, min area 300) | 0.391 (f0) | â€“ | untuned val 0.359; SQ 0.676, RQ 0.578; FP 1043 vs FN 552; best epoch = last (still improving); threshold surface flat 0.5â€“0.9 |
+| 2026-10-04 | Reference: one annotator vs the others (multi-annotated images only) | 0.340 | – | SQ 0.633, RQ 0.537; per fold 0.316–0.385; worst sites U 0.304, M 0.314 |
+| 2026-10-04 | Classical darkness detector (thr 0.2, min area 500, min mean 0.4) | 0.183 | – | all 707 images; FP-dominated (RQ 0.28) |
+| 2026-10-04 | U-Net ResNet34, 512 crops, BCE+Dice, 30 ep × 4000 crops, **fold 0 only** (thr 0.5, min area 300) | 0.391 (f0) | – | untuned val 0.359; SQ 0.676, RQ 0.578; FP 1043 vs FN 552; best epoch = last (still improving); threshold surface flat 0.5–0.9 |
 
 *Public LB ≈ 0.87 × local OOF PQ for both models so far (public test subset somewhat harder, plus noise on about 90 images).*
