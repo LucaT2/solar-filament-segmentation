@@ -30,6 +30,10 @@ def main() -> None:
     if (exp_dir / "rescorer.pkl").exists() and not args.no_rescore:
         rescorer = Rescorer.load(exp_dir / "rescorer.pkl")
         print(f"using component rescorer (min P(match) = {rescorer.min_p})")
+        if args.split == "oof":
+            print("WARNING: the rescorer was fitted on these OOF components; scoring this CSV is in-sample (optimistic).\n"
+                  "         Use --no-rescore for an honest CSV check; the honest PQ with rescoring is oof_pq_nested "
+                  "in rescorer.json.")
     image_dir = paths.test_images if args.split == "test" else paths.train_images
     stems = sorted(p.stem for p in image_dir.glob("*.jpeg"))
     if args.split == "oof":  # OOF maps may exist for only some folds so far
