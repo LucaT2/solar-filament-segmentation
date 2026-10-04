@@ -14,7 +14,8 @@ src/filament/     library code (paths, data, preprocessing, RLE, metric, models,
 configs/          one YAML config per experiment
 scripts/          command-line entry points
 notebooks/        data analysis + the Kaggle train/submit notebook
-tests/            unit tests (RLE round-trip, metric)
+tests/            unit tests (RLE/submission round-trip, metric equivalence, folds, post-processing)
+notes/            competition overview, data findings, literature notes
 outputs/          checkpoints, predictions, submissions (git-ignored)
 ```
 
@@ -46,3 +47,30 @@ kaggle competitions download -c filament-segmentation-2026
 
 Extract it into `filament-segmentation-2026/` in the repo root, or set `FILAMENT_DATA` to the
 `MAGFiLO_1.0_Kaggle_2026` folder. On Kaggle the data is found automatically under `/kaggle/input`.
+
+## Pipeline
+
+Every model writes one probability map per image (`outputs/<exp>/oof/` for out-of-fold training images,
+`outputs/<exp>/test/` for test images). Post-processing (threshold → connected components → size and confidence
+filters) is tuned separately on the out-of-fold maps against the exact competition metric.
+
+```bash
+python scripts/make_folds.py                                    # once: configs/folds.csv (already committed)
+
+# U-Net: train all folds (writes OOF maps), predict test with the fold ensemble
+python scripts/train.py --config configs/unet_r34.yaml --fold 0 1 2 3 4
+python scripts/predict.py --exp unet_r34 --tta
+
+# classical baseline instead of the U-Net: python scripts/run_classical.py   (exp name: classical)
+
+python scripts/tune_postprocess.py --exp unet_r34               # -> outputs/unet_r34/postprocess.json
+python scripts/make_submission.py --exp unet_r34                # -> outputs/unet_r34/submission.csv
+python scripts/make_submission.py --exp unet_r34 --split oof    # OOF CSV, then:
+python scripts/evaluate.py --pred outputs/unet_r34/oof_submission.csv
+```
+
+On Kaggle, [notebooks/kaggle_train_submit.ipynb](notebooks/kaggle_train_submit.ipynb) runs the same steps, training
+two folds in parallel on a T4 ×2 machine.
+
+Tests: `python -m pytest -W ignore::DeprecationWarning`. The metric tests compare against the organizers'
+self-evaluation notebook when it is present in the repo root (it is not redistributed here).
