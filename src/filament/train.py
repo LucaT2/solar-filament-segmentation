@@ -33,6 +33,7 @@ from filament.model import BCEDiceLoss, build_model, predict_full
 from filament.paths import get_data_paths, get_output_dir
 from filament.postprocess import find_components
 from filament.preprocess import disk_mask, read_image
+from filament.tracking import start_run
 
 
 @dataclass
@@ -58,6 +59,9 @@ class TrainConfig:
     val_thresholds: list = field(default_factory=lambda: [0.3, 0.4, 0.5, 0.6])
     val_min_area: int = 50
     seed: int = 42
+    wandb: str = "auto"  # auto | on | offline | off (see filament.tracking)
+    wandb_project: str | None = None
+    wandb_entity: str | None = None
 
     @classmethod
     def load(cls, path: str | Path, overrides: list[str] | None = None) -> "TrainConfig":
@@ -148,6 +152,17 @@ def run(cfg: TrainConfig, fold: int) -> dict:
     dtype = amp_dtype(cfg.amp)
 
     ckpt_path = out / (f"fold{fold}.pt" if fold >= 0 else "full.pt")
+    tracker = start_run(
+        cfg.wandb,
+        name=f"{cfg.name}-fold{fold}" if fold >= 0 else f"{cfg.name}-full",
+        group=cfg.name,
+        job_type="train",
+        config={**asdict(cfg), "fold": fold, "n_train_images": len(train_stems), "n_val_images": len(val_stems),
+                "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else "cpu"},
+        tags=[cfg.arch, cfg.encoder],
+        project=cfg.wandb_project,
+        entity=cfg.wandb_entity,
+    )
     best, log = -1.0, []
     for epoch in range(1, cfg.epochs + 1):
         t0, losses = time.time(), []
@@ -176,6 +191,9 @@ def run(cfg: TrainConfig, fold: int) -> dict:
             torch.save({"model": model.state_dict(), "config": asdict(cfg), "epoch": epoch}, ckpt_path)
         log.append(row)
         pd.DataFrame(log).to_csv(out / f"log_fold{fold}.csv", index=False)
+        tracker.log({**{k.replace("pq@", "val/pq@"): v for k, v in row.items()},
+                     "val/pq_best_thr": max((v for k, v in row.items() if k.startswith("pq@")), default=None)},
+                    step=epoch)
         print(" ".join(f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}" for k, v in row.items()), flush=True)
 
     result = {"fold": fold, "best_val_pq": best}
@@ -185,5 +203,8 @@ def run(cfg: TrainConfig, fold: int) -> dict:
         final = validate(model, cfg, infos, gt, device, out_dir=out / "oof")  # writes OOF maps of the best model
         result.update({"best_epoch": state["epoch"], "final_pq": final})
     (out / f"result_fold{fold}.json").write_text(json.dumps(result, indent=2, default=str))
+    tracker.summary({"best_val_pq": best, "best_epoch": result.get("best_epoch"),
+                     **{f"final/pq@{t}": v for t, v in result.get("final_pq", {}).items()}})
+    tracker.finish()
     print(result)
     return result

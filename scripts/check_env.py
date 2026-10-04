@@ -26,6 +26,7 @@ PACKAGES = [
     "matplotlib",
     "yaml",
     "tqdm",
+    "wandb",
 ]
 
 

@@ -17,3 +17,4 @@ scikit-learn==1.7.2
 matplotlib==3.11.2
 PyYAML==6.0.3
 tqdm==4.70.1
+wandb==0.30.0

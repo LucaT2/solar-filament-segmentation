@@ -21,6 +21,7 @@ from filament.folds import load_folds
 from filament.inference import save_postprocess
 from filament.paths import get_data_paths, get_output_dir
 from filament.postprocess import PostConfig
+from filament.tracking import start_run
 
 
 def main() -> None:
@@ -32,6 +33,7 @@ def main() -> None:
     parser.add_argument("--disk-scale", type=float, default=1.0)
     parser.add_argument("--fold", type=int, nargs="*", help="restrict to these folds (default: all images)")
     parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--wandb", default="auto", choices=["auto", "on", "offline", "off"])
     args = parser.parse_args()
 
     paths = get_data_paths()
@@ -57,6 +59,16 @@ def main() -> None:
     print("\nPQ by threshold (best min_area / min_score for each):")
     print(grid.groupby("threshold").pq.max().round(4).to_string())
     print(f"\nbest: {cfg}  OOF PQ = {best.pq:.4f}  ({time.time() - t0:.0f}s)")
+
+    folds_used = sorted(folds[folds.stem.isin(stems)].fold.unique().tolist())
+    tracker = start_run(args.wandb, name=f"{args.exp}-tune-f{''.join(map(str, folds_used))}", group=args.exp,
+                        job_type="tune", config={"exp": args.exp, "folds": folds_used, "n_images": len(stems),
+                                                 "thresholds": args.thresholds, "min_areas": args.min_areas,
+                                                 "min_scores": args.min_scores, "disk_scale": args.disk_scale})
+    tracker.summary({"oof_pq": float(best.pq), "oof_sq": float(best.sq), "oof_rq": float(best.rq),
+                     **{f"best/{k}": v for k, v in cfg.to_dict().items()}})
+    tracker.table("grid", grid)
+    tracker.finish()
 
 
 if __name__ == "__main__":

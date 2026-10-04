@@ -69,6 +69,10 @@ python scripts/make_submission.py --exp unet_r34 --split oof    # OOF CSV, then:
 python scripts/evaluate.py --pred outputs/unet_r34/oof_submission.csv
 ```
 
+**Tracking:** training and tuning runs are logged to Weights & Biases (project `solar-filament-segmentation`, one run
+per fold, grouped by experiment) when credentials are available (`wandb login`, or `WANDB_API_KEY`). Without them
+nothing is logged. Force with `--set wandb=on|offline|off` (training) or `--wandb ...` (tuning).
+
 On Kaggle, [notebooks/kaggle_train_submit.ipynb](notebooks/kaggle_train_submit.ipynb) runs the same steps, training
 two folds in parallel on a T4 ×2 machine.
 
