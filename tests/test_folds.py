@@ -10,6 +10,13 @@ def test_every_image_in_exactly_one_fold(ai):
     assert set(folds.fold) == set(range(N_FOLDS))
 
 
+def test_annotations_of_one_image_share_a_fold(ai):
+    """No image may be in training under one annotator and in validation under another."""
+    merged = ai.merge(load_folds()[["stem", "fold"]], on="stem", how="left")
+    assert merged.fold.notna().all()
+    assert (merged.groupby("stem").fold.nunique() == 1).all()
+
+
 def test_folds_are_balanced(ai):
     folds = make_folds(ai)
     sizes = folds.fold.value_counts()
