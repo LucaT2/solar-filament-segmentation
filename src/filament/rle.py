@@ -50,7 +50,9 @@ def _as_bytes(rle: dict) -> dict:
 
 
 def rle_area(rles: list[dict]) -> np.ndarray:
-    return mask_util.area([_as_bytes(r) for r in rles])
+    # pycocotools' area() overflows (uint8 count) for more than 255 RLEs per call under numpy 2.x -> chunk it
+    chunks = [mask_util.area([_as_bytes(r) for r in rles[i : i + 200]]) for i in range(0, len(rles), 200)]
+    return np.concatenate(chunks).astype(np.int64) if chunks else np.zeros(0, dtype=np.int64)
 
 
 def rle_iou(gt: list[dict], pred: list[dict]) -> np.ndarray:

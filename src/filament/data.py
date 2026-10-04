@@ -97,6 +97,13 @@ def annotation_table(coco: dict, with_rle: bool = True) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def ground_truth_table(annotations: pd.DataFrame, stems=None) -> pd.DataFrame:
+    """Ground truth in the hidden-GT format (``<annotator>-<stem>_<k>``), optionally restricted to some stems."""
+    if stems is not None:
+        annotations = annotations[annotations["stem"].isin(set(stems))]
+    return to_submission_format(annotations, key="annotator_image")
+
+
 def to_submission_format(annotations: pd.DataFrame, key: str = "annotator_image") -> pd.DataFrame:
     """Convert an annotation table into the ``filament_id, segmentation_rle`` format.
 

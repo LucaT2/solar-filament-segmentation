@@ -52,16 +52,19 @@ images, and the organizers have said some leaderboard scores are gamed.
 - [x] Deliverables: [notebooks/01_eda.ipynb](notebooks/01_eda.ipynb) + [notes/findings.md](notes/findings.md).
 
 ## Stage 2 — Validation harness (before any model)
-- [ ] Exact reimplementation of the official PQ (from `self-evaluation-notebook.ipynb`), plus Dice/IoU distributions and
-      1:n / n:1 counts. *(Fast RLE-based version already in `src/filament/metric.py`; still to do: an equivalence
-      test against the official dense implementation.)*
-- [ ] RLE encode/decode round-trip tests. GT written as a submission must score PQ = 1.0.
-- [ ] 5-fold cross-validation grouped by image stem, stratified by site and annotator count (Stage 1 showed this
-      matches the train→test time structure).
-- [ ] Multi-annotator ground truth: replicate the official scoring. GT is grouped per **annotator-image**
-      (`<prefix>-<stem>`), and each annotator's set is scored separately against the single prediction for that
-      image, so multi-annotated images count 2–3×. Folds are grouped by image stem so one image never appears in
-      both train and validation under different annotators.
+- [x] Exact reimplementation of the official PQ, plus Dice/IoU distributions and 1:n / n:1 counts
+      (`src/filament/metric.py`). `tests/test_metric.py` checks it against the organizers' own functions, loaded from
+      their notebook, on deliberately damaged predictions (wider/thinner, shifted, dropped, split, merged, duplicated,
+      false blobs, empty images, unknown images): **identical PQ and IoU matrices**.
+- [x] RLE round-trip tests; GT written through the submission writer and read back scores PQ = 1.0
+      (`tests/test_rle_submission.py`). Submission writer and validator in `src/filament/submission.py`.
+- [x] 5-fold cross-validation grouped by image stem, stratified by site × annotator count →
+      [configs/folds.csv](configs/folds.csv) (`scripts/make_folds.py`, guarded by `tests/test_folds.py`).
+- [x] Multi-annotator ground truth scored per **annotator-image**, exactly like the official metric.
+- [x] OOF evaluator: `python scripts/evaluate.py --pred <csv> [--fold k]` → PQ/SQ/RQ, overlap and split/merge rates,
+      breakdowns by site, annotator count and fold.
+- **Noise level:** human-vs-human PQ ranges from 0.316 to 0.385 across folds. Compare models on 5-fold OOF PQ, not on
+      single folds or the about 90-image public leaderboard.
 
 ## Stage 3 — Baselines
 - [ ] **Classical:** limb-darkening correction → adaptive threshold → morphology → connected components. A floor score and
@@ -127,4 +130,4 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 
 | Date | Experiment | CV PQ | Public LB | Notes |
 |------|------------|-------|-----------|-------|
-|      |            |       |           |       |
+| 2026-10-04 | Reference: one annotator vs the others (multi-annotated images only) | 0.340 | – | SQ 0.633, RQ 0.537; per fold 0.316–0.385; worst sites U 0.304, M 0.314 |

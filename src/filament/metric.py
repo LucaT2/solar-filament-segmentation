@@ -125,6 +125,50 @@ def pq_score(gt_df: pd.DataFrame, pred_df: pd.DataFrame) -> PQResult:
     return score_images(images)
 
 
+def pq_by_group(result: PQResult, group_of) -> pd.DataFrame:
+    """Recompute PQ/SQ/RQ for subsets of annotator-images.
+
+    ``group_of(annotator_image_key) -> label``, e.g. ``lambda k: k.split("-", 1)[1][14]`` groups by GONG site.
+    """
+    groups: dict = {}
+    for s in result.images:
+        groups.setdefault(group_of(s.key), []).append(s)
+    rows = []
+    for label, images in groups.items():
+        r = score_images(images)
+        rows.append({"group": label, "n": len(images), "pq": r.pq, "sq": r.sq, "rq": r.rq,
+                     "tp": r.tp, "fp": r.fp, "fn": r.fn})
+    return pd.DataFrame(rows).sort_values("group").reset_index(drop=True)
+
+
+def overlap_scores(images: list[ImageScore]) -> tuple[np.ndarray, np.ndarray]:
+    """IoU and Dice of all overlapping (IoU > 0) GT/prediction pairs, as plotted by the official notebook."""
+    iou = np.concatenate([s.iou.ravel() for s in images]) if images else np.zeros(0)
+    iou = iou[iou > 0]
+    return iou, 2 * iou / (1 + iou)
+
+
+def summarize(result: PQResult) -> dict:
+    """Headline numbers for logging: PQ decomposition, overlap statistics, and 1:n / n:1 rates."""
+    iou, dice = overlap_scores(result.images)
+    gt_deg, pred_deg = match_degrees(result.images)
+    return {
+        "pq": result.pq,
+        "sq": result.sq,
+        "rq": result.rq,
+        "tp": result.tp,
+        "fp": result.fp,
+        "fn": result.fn,
+        "n_annotator_images": len(result.images),
+        "mean_overlap_iou": float(iou.mean()) if iou.size else 0.0,
+        "mean_overlap_dice": float(dice.mean()) if dice.size else 0.0,
+        "gt_missed_share": float((gt_deg == 0).mean()) if gt_deg.size else 0.0,
+        "gt_split_share": float((gt_deg > 1).mean()) if gt_deg.size else 0.0,  # 1:n
+        "pred_unmatched_share": float((pred_deg == 0).mean()) if pred_deg.size else 0.0,
+        "pred_merged_share": float((pred_deg > 1).mean()) if pred_deg.size else 0.0,  # n:1
+    }
+
+
 def match_degrees(images: list[ImageScore]) -> tuple[np.ndarray, np.ndarray]:
     """Number of partners with IoU > 0 for each GT (1:n) and each prediction (n:1), as in the official plots."""
     gt_deg, pred_deg = [], []
