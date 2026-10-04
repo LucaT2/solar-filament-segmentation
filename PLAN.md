@@ -81,7 +81,8 @@ images, and the organizers have said some leaderboard scores are gamed.
         config `configs/unet_r34.yaml`, Kaggle notebook `notebooks/kaggle_train_submit.ipynb`.
   - [x] Fold 0 trained locally (RTX 5070 laptop, ~40 min): **PQ 0.391** after tuning. On fold 0's multi-annotated
         images: model ≈ 0.38 vs human 0.328.
-  - [ ] Folds 1–4 (Kaggle notebook or locally, ~40 min each) → full 5-fold OOF PQ and a 5-model ensemble.
+  - [x] Folds 1–4 trained locally (`scripts/run_pipeline.ps1`, ~2 h 40 min) → **5-fold OOF PQ 0.403** (folds
+        0.391–0.412), **0.425 with the rescorer** (nested); 5-model ensemble + flip TTA for test.
 - [ ] First Kaggle submission (CSV upload). *(Ready: `outputs/unet_r34/submission.csv` from the fold-0 model + flip
       TTA.)*
 
@@ -150,6 +151,9 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 
 | 2026-10-04 | + component rescoring classifier (P(match) ≥ 0.3), fold 0, CV within fold | 0.419 (f0) | – | analysis estimate on non-TTA OOF maps; AUC 0.78 |
 | 2026-10-04 | U-Net fold 0, OOF maps re-predicted **with flip TTA** (same as test) | 0.402 (f0) | (0.34) | TTA alone +0.011 on OOF; the earlier upload already used TTA test maps |
-| 2026-10-04 | + rescorer in the pipeline (`fit_rescorer.py`, min_p 0.3, trained on fold-0 components) | 0.427 (f0); nested 0.424 | 0.36 | `outputs/unet_r34/submission_rescored.csv`; keeps 80% of components on test vs 79% on OOF; nested = cut-off chosen without the held-out images |
+| 2026-10-04 | + rescorer in the pipeline (`fit_rescorer.py`, min_p 0.3, trained on fold-0 components) | 0.427 (f0); nested 0.424 | 0.36 |
+| 2026-10-04 | **5 folds**, TTA OOF, tuned on 707 images (thr 0.6, min area 400) | **0.403** | – | folds 0.391–0.412; sites L 0.386 / M 0.388 lowest, U 0.422 / T 0.416 highest |
+| 2026-10-04 | + rescorer on 9,142 OOF components (min_p 0.4); test = 5-model avg + TTA | **0.425** nested | ? | `submission_5fold.csv`; averaging lowers mean_prob → classifier keeps 71% on test vs 78% on OOF (≈ −0.004) |
+| 2026-10-05 | same, cut-off calibrated to the OOF keep rate (min_p 0.297 on test) | 0.425 | ? | `submission_5fold_calibrated.csv` | `outputs/unet_r34/submission_rescored.csv`; keeps 80% of components on test vs 79% on OOF; nested = cut-off chosen without the held-out images |
 
 *Public LB ≈ 0.87 × local OOF PQ for both models so far (public test subset somewhat harder, plus noise on about 90 images).*
