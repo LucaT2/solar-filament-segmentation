@@ -25,6 +25,11 @@ def main() -> None:
     cfg = load_postprocess(exp_dir / "postprocess.json")
     image_dir = paths.test_images if args.split == "test" else paths.train_images
     stems = sorted(p.stem for p in image_dir.glob("*.jpeg"))
+    if args.split == "oof":  # OOF maps may exist for only some folds so far
+        available = {p.stem for p in (exp_dir / "oof").glob("*.png")}
+        if len(available) < len(stems):
+            print(f"note: OOF maps for {len(available)} of {len(stems)} training images; writing those only")
+        stems = [s for s in stems if s in available]
 
     sub = probs_to_submission(exp_dir / args.split, stems, cfg, image_dir)
     problems = validate_submission(sub, expected_stems=stems)

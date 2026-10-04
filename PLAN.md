@@ -67,8 +67,9 @@ images, and the organizers have said some leaderboard scores are gamed.
       single folds or the about 90-image public leaderboard.
 
 ## Stage 3 — Baselines
-- [ ] **Classical:** limb-darkening correction → adaptive threshold → morphology → connected components. A floor score and
-      a comparison point for the report.
+- [x] **Classical:** local darkness vs a 101 px median background → threshold → connected components → size and
+      confidence filters. **OOF PQ 0.183** (all 707 images). Mostly false positives (49% of blobs unmatched: fibrils,
+      sunspots), 31% of filaments missed, 13% split.
 - [ ] **Deep baseline:**
   - U-Net (EfficientNet/ResNet34 encoder) for binary filament segmentation, **1 input channel** (grayscale).
   - Per-image normalization; predictions outside the solar disk are masked (disk estimated per image).
@@ -76,7 +77,13 @@ images, and the organizers have said some leaderboard scores are gamed.
   - Trained on full-resolution 512–1024 crops; inference with an overlapping sliding window.
   - Connected components (no linking of nearby pieces) + minimum-area filter → instances → RLE.
   - Threshold and minimum area tuned for PQ on out-of-fold predictions.
-- [ ] First Kaggle submission (CSV upload).
+  - [x] Pipeline built: `scripts/train.py` / `predict.py` / `tune_postprocess.py` / `make_submission.py`,
+        config `configs/unet_r34.yaml`, Kaggle notebook `notebooks/kaggle_train_submit.ipynb`.
+  - [x] Fold 0 trained locally (RTX 5070 laptop, ~40 min): **PQ 0.391** after tuning. On fold 0's multi-annotated
+        images: model ≈ 0.38 vs human 0.328.
+  - [ ] Folds 1–4 (Kaggle notebook or locally, ~40 min each) → full 5-fold OOF PQ and a 5-model ensemble.
+- [ ] First Kaggle submission (CSV upload). *(Ready: `outputs/unet_r34/submission.csv` from the fold-0 model + flip
+      TTA.)*
 
 ## Stage 4 — Error analysis
 - [ ] Sort out-of-fold errors into buckets: false-positive blobs / missed filaments / fragmented / merged / IoU just below 0.5.
@@ -131,3 +138,5 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 | Date | Experiment | CV PQ | Public LB | Notes |
 |------|------------|-------|-----------|-------|
 | 2026-10-04 | Reference: one annotator vs the others (multi-annotated images only) | 0.340 | – | SQ 0.633, RQ 0.537; per fold 0.316–0.385; worst sites U 0.304, M 0.314 |
+| 2026-10-04 | Classical darkness detector (thr 0.2, min area 500, min mean 0.4) | 0.183 | – | all 707 images; FP-dominated (RQ 0.28) |
+| 2026-10-04 | U-Net ResNet34, 512 crops, BCE+Dice, 30 ep × 4000 crops, **fold 0 only** (thr 0.5, min area 300) | 0.391 (f0) | – | untuned val 0.359; SQ 0.676, RQ 0.578; FP 1043 vs FN 552; best epoch = last (still improving); threshold surface flat 0.5–0.9 |
