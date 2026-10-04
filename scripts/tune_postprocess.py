@@ -31,8 +31,10 @@ def main() -> None:
     parser.add_argument("--min-areas", type=int, nargs="+", default=[0, 25, 50, 100, 150, 200, 300])
     parser.add_argument("--min-scores", type=float, nargs="+", default=[0.0])
     parser.add_argument("--disk-scale", type=float, default=1.0)
+    parser.add_argument("--link-px", type=int, nargs="+", default=[0], help="link fragments closer than ~2*k px")
     parser.add_argument("--fold", type=int, nargs="*", help="restrict to these folds (default: all images)")
     parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--no-save", action="store_true", help="analysis only: don't overwrite postprocess.json/grid.csv")
     parser.add_argument("--wandb", default="auto", choices=["auto", "on", "offline", "off"])
     args = parser.parse_args()
 
@@ -49,11 +51,13 @@ def main() -> None:
     t0 = time.time()
     gt = GroundTruth(annotation_table(load_coco(paths.annotations)), stems)
     grid = grid_search(exp_dir / "oof", gt, paths.train_images, args.thresholds, args.min_areas, args.min_scores,
-                       args.disk_scale, args.workers)
-    grid.to_csv(exp_dir / "grid.csv", index=False)
+                       args.disk_scale, args.workers, args.link_px)
     best = grid.iloc[0]
-    cfg = PostConfig(float(best.threshold), int(best.min_area), float(best.min_score), args.disk_scale)
-    save_postprocess(exp_dir / "postprocess.json", cfg, {"oof_pq": float(best.pq), "n_images": len(stems)})
+    cfg = PostConfig(float(best.threshold), int(best.min_area), float(best.min_score), args.disk_scale,
+                     int(best.link_px))
+    if not args.no_save:
+        grid.to_csv(exp_dir / "grid.csv", index=False)
+        save_postprocess(exp_dir / "postprocess.json", cfg, {"oof_pq": float(best.pq), "n_images": len(stems)})
 
     print(grid.head(10).round(4).to_string(index=False))
     print("\nPQ by threshold (best min_area / min_score for each):")
@@ -64,7 +68,8 @@ def main() -> None:
     tracker = start_run(args.wandb, name=f"{args.exp}-tune-f{''.join(map(str, folds_used))}", group=args.exp,
                         job_type="tune", config={"exp": args.exp, "folds": folds_used, "n_images": len(stems),
                                                  "thresholds": args.thresholds, "min_areas": args.min_areas,
-                                                 "min_scores": args.min_scores, "disk_scale": args.disk_scale})
+                                                 "min_scores": args.min_scores, "disk_scale": args.disk_scale,
+                                                 "link_px": args.link_px})
     tracker.summary({"oof_pq": float(best.pq), "oof_sq": float(best.sq), "oof_rq": float(best.rq),
                      **{f"best/{k}": v for k, v in cfg.to_dict().items()}})
     tracker.table("grid", grid)

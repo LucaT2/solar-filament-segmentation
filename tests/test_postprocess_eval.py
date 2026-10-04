@@ -23,14 +23,16 @@ def fake_prob(ann, aid, seed=0):
     return np.clip(prob, 0, 1)
 
 
-@pytest.mark.parametrize("cfg", [PostConfig(0.5), PostConfig(0.3, 40), PostConfig(0.6, 10, 0.7)])
+@pytest.mark.parametrize(
+    "cfg", [PostConfig(0.5), PostConfig(0.3, 40), PostConfig(0.6, 10, 0.7), PostConfig(0.5, 40, link_px=4)]
+)
 def test_fast_scorer_matches_metric(ann, ai, cfg):
     stems = ai[ai.n_annotators == 3].stem.drop_duplicates().iloc[:2].tolist()
     gt = GroundTruth(ann, stems)
     fast, pred_rles = [], {}
     for stem in stems:
         prob = fake_prob(ann, ai[ai.stem == stem].annotator_image.iloc[0])
-        comps = find_components(prob, cfg.threshold)
+        comps = find_components(prob, cfg.threshold, link_px=cfg.link_px)
         fast += score_components(stem, comps, comps.keep(cfg.min_area, cfg.min_score), gt)
         pred_rles[stem] = [mask_to_rle(m) for m in instances(prob, cfg)]
 
@@ -40,6 +42,15 @@ def test_fast_scorer_matches_metric(ann, ai, cfg):
     ours = score_images(fast)
     assert (ours.tp, ours.fp, ours.fn) == (reference.tp, reference.fp, reference.fn)
     assert ours.pq == pytest.approx(reference.pq, abs=1e-9)
+
+
+def test_link_keeps_original_pixels():
+    prob = np.zeros((2048, 2048), np.float32)
+    prob[100:110, 100:150] = 0.9
+    prob[100:110, 154:200] = 0.9  # 4 px gap
+    unlinked, linked = find_components(prob, 0.5), find_components(prob, 0.5, link_px=3)
+    assert (unlinked.n, linked.n) == (2, 1)
+    assert linked.area[1] == unlinked.area[1:].sum()  # gap pixels are not added to the instance
 
 
 def test_component_stats():

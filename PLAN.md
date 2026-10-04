@@ -86,13 +86,20 @@ images, and the organizers have said some leaderboard scores are gamed.
       TTA.)*
 
 ## Stage 4 — Error analysis
-- [ ] Sort out-of-fold errors into buckets: false-positive blobs / missed filaments / fragmented / merged / IoU just below 0.5.
-      Use the same categories as the human-vs-human analysis so the model can be compared with human disagreement.
-- [ ] Break down by site (especially Mauna Loa), filament size, category and distance from the disk center.
-- [ ] Check whether predicted masks are systematically too thin or too wide (outline width is the most sensitive knob).
-- [ ] The largest bucket decides the Stage 5 priorities.
+*Done on fold 0 only (142 images): [notes/error_analysis.md](notes/error_analysis.md),
+[notebooks/02_error_analysis.ipynb](notebooks/02_error_analysis.ipynb). Re-run with all folds once they exist.*
+- [x] Error buckets vs human: model match 66% vs 54%, better in every bucket **except splits** (5.8% vs 2.9%;
+      19% for filaments > 3,200 px).
+- [x] Breakdowns: small (35% missed, same as humans), unidentifiable (20% missed), near the limb (35% missed, n = 34);
+      no site stands out.
+- [x] Outline width: no bias (±1 px both hurt). Linking pieces: ≤ +0.004, so splits need a model-side fix.
+- [x] False positives: on multi-annotated images only 32% of kept components match all annotators. Pure FPs look like
+      unlabeled faint filaments near the limb.
+- [x] **Component rescoring classifier: PQ 0.391 → 0.419** (AUC 0.78 vs 0.66 for size alone).
 
 ## Stage 5 — Main approach: precise, connected, consensus segmentation
+*Priorities from Stage 4: (1) component rescoring on all-fold OOF, (2) large and chained filaments: bigger
+crops, Skeleton Recall, longer training, (3) 5-fold ensemble. Outline width and linking need no work.*
 *Revised after Stage 1: GT instances almost never touch, so connected components replace the planned instance
 head and watershed. The PQ levers are boundary precision (±1 px), connectivity, and the confidence/size cut-off.*
 - [ ] **Stronger full-resolution model:** U-Net++ / UPerNet with a ConvNeXt or EfficientNetV2 encoder. No more than 2×
@@ -140,5 +147,7 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 | 2026-10-04 | Reference: one annotator vs the others (multi-annotated images only) | 0.340 | – | SQ 0.633, RQ 0.537; per fold 0.316–0.385; worst sites U 0.304, M 0.314 |
 | 2026-10-04 | Classical darkness detector (thr 0.2, min area 500, min mean 0.4) | 0.183 | – | all 707 images; FP-dominated (RQ 0.28) |
 | 2026-10-04 | U-Net ResNet34, 512 crops, BCE+Dice, 30 ep × 4000 crops, **fold 0 only** (thr 0.5, min area 300) | 0.391 (f0) | – | untuned val 0.359; SQ 0.676, RQ 0.578; FP 1043 vs FN 552; best epoch = last (still improving); threshold surface flat 0.5–0.9 |
+
+| 2026-10-04 | + component rescoring classifier (P(match) ≥ 0.3), fold 0, CV within fold | 0.419 (f0) | – | analysis estimate, not yet in the pipeline; AUC 0.78 |
 
 *Public LB ≈ 0.87 × local OOF PQ for both models so far (public test subset somewhat harder, plus noise on about 90 images).*

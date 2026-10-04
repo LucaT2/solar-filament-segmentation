@@ -72,23 +72,23 @@ def evaluate_probs(prob_dir, gt: GroundTruth, cfg: PostConfig, image_dir) -> PQR
     images, disks = [], {}
     for stem in gt.stems:
         prob = load_prob(prob_dir, stem)
-        comps = find_components(prob, cfg.threshold, region_for(stem, image_dir, cfg.disk_scale, disks))
+        comps = find_components(prob, cfg.threshold, region_for(stem, image_dir, cfg.disk_scale, disks), cfg.link_px)
         images += score_components(stem, comps, comps.keep(cfg.min_area, cfg.min_score), gt)
     return score_images(images)
 
 
 def _grid_one_image(args) -> dict[tuple, list[ImageScore]]:
-    stem, stem_gt, prob_dir, image_dir, thresholds, min_areas, min_scores, disk_scale = args
+    stem, stem_gt, prob_dir, image_dir, thresholds, min_areas, min_scores, disk_scale, link_pxs = args
     gt = GroundTruth.__new__(GroundTruth)
     gt.by_stem = {stem: stem_gt}
     prob = load_prob(prob_dir, stem)
     region = region_for(stem, image_dir, disk_scale, {})
     out: dict[tuple, list[ImageScore]] = {}
-    for thr in thresholds:
-        comps = find_components(prob, thr, region)
+    for thr, link in itertools.product(thresholds, link_pxs):
+        comps = find_components(prob, thr, region, link)
         for min_area, min_score in itertools.product(min_areas, min_scores):
             keep = comps.keep(min_area, min_score)
-            out[(thr, min_area, min_score)] = score_components(stem, comps, keep, gt)
+            out[(thr, min_area, min_score, link)] = score_components(stem, comps, keep, gt)
     return out
 
 
@@ -101,13 +101,15 @@ def grid_search(
     min_scores=(0.0,),
     disk_scale: float = 1.0,
     workers: int = 8,
+    link_pxs=(0,),
 ) -> pd.DataFrame:
-    """PQ for every (threshold, min_area, min_score) combination; components are computed once per threshold.
+    """PQ for every (threshold, min_area, min_score, link_px) combination; components are computed once per
+    (threshold, link_px).
 
     Images are processed in parallel (``workers`` processes; 0 = in-process).
     """
-    jobs = [(s, gt.by_stem[s], prob_dir, image_dir, list(thresholds), list(min_areas), list(min_scores), disk_scale)
-            for s in gt.stems]
+    jobs = [(s, gt.by_stem[s], prob_dir, image_dir, list(thresholds), list(min_areas), list(min_scores), disk_scale,
+             list(link_pxs)) for s in gt.stems]
     if workers > 0:
         from concurrent.futures import ProcessPoolExecutor
 
@@ -120,8 +122,8 @@ def grid_search(
         for combo, scores in res.items():
             per_combo.setdefault(combo, []).extend(scores)
     rows = []
-    for (thr, min_area, min_score), images in per_combo.items():
+    for (thr, min_area, min_score, link), images in per_combo.items():
         r = score_images(images)
-        rows.append({"threshold": thr, "min_area": min_area, "min_score": min_score,
+        rows.append({"threshold": thr, "min_area": min_area, "min_score": min_score, "link_px": link,
                      "pq": r.pq, "sq": r.sq, "rq": r.rq, "tp": r.tp, "fp": r.fp, "fn": r.fn})
     return pd.DataFrame(rows).sort_values("pq", ascending=False).reset_index(drop=True)

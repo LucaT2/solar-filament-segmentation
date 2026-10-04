@@ -20,6 +20,7 @@ class PostConfig:
     min_area: int = 0  # drop components smaller than this (px)
     min_score: float = 0.0  # drop components whose mean probability is below this
     disk_scale: float = 1.0  # keep only components whose pixels are inside scale * R_sun (0 = no disk mask)
+    link_px: int = 0  # pieces closer than about 2 * link_px px become one instance (each keeps its own pixels)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -44,12 +45,21 @@ class Components:
         return ids[ok]
 
 
-def find_components(prob: np.ndarray, threshold: float, region: np.ndarray | None = None) -> Components:
-    """Threshold ``prob`` (float in [0, 1]) inside ``region`` and label 8-connected components."""
+def find_components(prob: np.ndarray, threshold: float, region: np.ndarray | None = None, link_px: int = 0) -> Components:
+    """Threshold ``prob`` (float in [0, 1]) inside ``region`` and label 8-connected components.
+
+    With ``link_px > 0``, components are found on the mask dilated by ``link_px`` (so nearby pieces of a fragmented
+    filament share one label), but each instance keeps only its original thresholded pixels.
+    """
     binary = prob > threshold
     if region is not None:
         binary &= region
-    n, labels = cv2.connectedComponents(binary.astype(np.uint8), connectivity=8, ltype=cv2.CV_32S)
+    seed = binary.astype(np.uint8)
+    if link_px > 0:
+        seed = cv2.dilate(seed, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * link_px + 1, 2 * link_px + 1)))
+    n, labels = cv2.connectedComponents(seed, connectivity=8, ltype=cv2.CV_32S)
+    if link_px > 0:
+        labels[~binary] = 0
     flat = labels.ravel()
     area = np.bincount(flat, minlength=n)
     psum = np.bincount(flat, weights=prob.ravel(), minlength=n)
@@ -58,7 +68,7 @@ def find_components(prob: np.ndarray, threshold: float, region: np.ndarray | Non
 
 def instances(prob: np.ndarray, cfg: PostConfig, region: np.ndarray | None = None) -> list[np.ndarray]:
     """Final instance masks for one image."""
-    comps = find_components(prob, cfg.threshold, region)
+    comps = find_components(prob, cfg.threshold, region, cfg.link_px)
     return [comps.labels == i for i in comps.keep(cfg.min_area, cfg.min_score)]
 
 
