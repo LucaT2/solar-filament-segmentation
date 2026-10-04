@@ -146,14 +146,13 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 | Date | Experiment | CV PQ | Public LB | Notes |
 |------|------------|-------|-----------|-------|
 | 2026-10-04 | Reference: one annotator vs the others (multi-annotated images only) | 0.340 | – | SQ 0.633, RQ 0.537; per fold 0.316–0.385; worst sites U 0.304, M 0.314 |
-| 2026-10-04 | Classical darkness detector (thr 0.2, min area 500, min mean 0.4) | 0.183 | – | all 707 images; FP-dominated (RQ 0.28) |
-| 2026-10-04 | U-Net ResNet34, 512 crops, BCE+Dice, 30 ep × 4000 crops, **fold 0 only** (thr 0.5, min area 300) | 0.391 (f0) | – | untuned val 0.359; SQ 0.676, RQ 0.578; FP 1043 vs FN 552; best epoch = last (still improving); threshold surface flat 0.5–0.9 |
-
+| 2026-10-04 | Classical darkness detector (thr 0.2, min area 500, min mean 0.4) | 0.183 | 0.16 | all 707 images; FP-dominated (RQ 0.28) |
+| 2026-10-04 | U-Net ResNet34, 512 crops, BCE+Dice, 30 ep × 4000 crops, **fold 0 only** (thr 0.5, min area 300) | 0.391 (f0) | 0.34 | untuned val 0.359; SQ 0.676, RQ 0.578; FP 1043 vs FN 552; best epoch = last (still improving); threshold surface flat 0.5–0.9; the LB upload used flip TTA on test |
 | 2026-10-04 | + component rescoring classifier (P(match) ≥ 0.3), fold 0, CV within fold | 0.419 (f0) | – | analysis estimate on non-TTA OOF maps; AUC 0.78 |
-| 2026-10-04 | U-Net fold 0, OOF maps re-predicted **with flip TTA** (same as test) | 0.402 (f0) | (0.34) | TTA alone +0.011 on OOF; the earlier upload already used TTA test maps |
-| 2026-10-04 | + rescorer in the pipeline (`fit_rescorer.py`, min_p 0.3, trained on fold-0 components) | 0.427 (f0); nested 0.424 | 0.36 |
+| 2026-10-04 | U-Net fold 0, OOF maps re-predicted **with flip TTA** (same as test) | 0.402 (f0) | (0.34) | TTA alone +0.011 on OOF |
+| 2026-10-04 | + rescorer in the pipeline (`fit_rescorer.py`, min_p 0.3, trained on fold-0 components) | 0.427 (f0); nested 0.424 | 0.36 | `submission_rescored.csv`; keeps 80% of components on test vs 79% on OOF; nested = cut-off chosen without the held-out images |
 | 2026-10-04 | **5 folds**, TTA OOF, tuned on 707 images (thr 0.6, min area 400) | **0.403** | – | folds 0.391–0.412; sites L 0.386 / M 0.388 lowest, U 0.422 / T 0.416 highest |
-| 2026-10-04 | + rescorer on 9,142 OOF components (min_p 0.4); test = 5-model avg + TTA | **0.425** nested | ? | `submission_5fold.csv`; averaging lowers mean_prob → classifier keeps 71% on test vs 78% on OOF (≈ −0.004) |
-| 2026-10-05 | same, cut-off calibrated to the OOF keep rate (min_p 0.297 on test) | 0.425 | ? | `submission_5fold_calibrated.csv` | `outputs/unet_r34/submission_rescored.csv`; keeps 80% of components on test vs 79% on OOF; nested = cut-off chosen without the held-out images |
+| 2026-10-04 | + rescorer on 9,142 OOF components (min_p 0.4); test = 5-model avg + TTA | **0.425** nested | **0.37** | `submission_5fold.csv`; averaging lowers mean_prob → classifier keeps 71% on test vs 78% on OOF (≈ −0.004) |
+| 2026-10-05 | same, cut-off calibrated to the OOF keep rate (min_p 0.297 on test) | 0.425 | **0.37** | `submission_5fold_calibrated.csv`; no visible difference from the uncalibrated one |
 
 *Public LB ≈ 0.87 × local OOF PQ for both models so far (public test subset somewhat harder, plus noise on about 90 images).*
