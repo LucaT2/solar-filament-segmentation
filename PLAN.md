@@ -98,6 +98,23 @@ images, and the organizers have said some leaderboard scores are gamed.
       unlabeled faint filaments near the limb.
 - [x] **Component rescoring classifier: PQ 0.391 → 0.419** (AUC 0.78 vs 0.66 for size alone).
 
+## Stage 5 — Roadmap (agreed 2026-10-09)
+Each step builds on the winner of the previous one; every idea is screened on fold 0 against the current baseline
+with a paired comparison (ΔPQ with a confidence interval), and only winners get a 5-fold run (Kaggle T4×2).
+Cut-off for new architectures: ~Oct 29; then final ensemble, report, repo, form (deadline Nov 15).
+
+- [ ] **Step 0 — tooling:** `scripts/compare.py` (paired ΔPQ + bootstrap CI on the same images); tiled prediction for
+      models that don't fit 2048² in memory; notebook option to run a different config per GPU.
+- [ ] **Step 1 — splits of large filaments:** 1024 px crops + Skeleton Recall loss + longer training (40–50 epochs);
+      ablate if it wins.
+- [ ] **Step 2 — consensus targets:** average of all annotators' masks as a soft target on multi-annotated images.
+- [ ] **Step 3 — encoders, then decoders:** U-Net with ResNet34 / ConvNeXt-T / EfficientNet-B4 / MiT-B2 → best 1–2
+      encoders with U-Net / UNet++ / UPerNet or FPN. Per-encoder learning rate (lower for the encoder).
+- [ ] **Step 4 — other architectures** (time-boxed): Mask2Former if splits/grouping still dominate, HRNet or DSCNet if
+      boundaries do.
+- [ ] Cheap extras along the way: classifier features (fragment, probability spread, texture) + lower size filter,
+      `pos_fraction` 0.5, disk-distance input channel, 8-way TTA, multi-scale TTA.
+
 ## Stage 5 — Main approach: precise, connected, consensus segmentation
 *Priorities from Stage 4: (1) component rescoring on all-fold OOF, (2) large and chained filaments: bigger
 crops, Skeleton Recall, longer training, (3) 5-fold ensemble. Outline width and linking need no work.*
@@ -154,5 +171,9 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 | 2026-10-04 | **5 folds**, TTA OOF, tuned on 707 images (thr 0.6, min area 400) | **0.403** | – | folds 0.391–0.412; sites L 0.386 / M 0.388 lowest, U 0.422 / T 0.416 highest |
 | 2026-10-04 | + rescorer on 9,142 OOF components (min_p 0.4); test = 5-model avg + TTA | **0.425** nested | **0.37** | `submission_5fold.csv`; averaging lowers mean_prob → classifier keeps 71% on test vs 78% on OOF (≈ −0.004) |
 | 2026-10-05 | same, cut-off calibrated to the OOF keep rate (min_p 0.297 on test) | 0.425 | **0.37** | `submission_5fold_calibrated.csv`; no visible difference from the uncalibrated one |
+| 2026-10-09 | 2 full-data models (all 707 images, seeds 42/43, last epoch), trained on Kaggle T4×2 | – (no validation) | **0.37** | `outputs/kaggle_runs/solar-fillament_v1/submission_full.csv`; 1,168 filaments; ~70 min per model on a T4 |
+| 2026-10-09 | 5 folds + 2 full-data models (7-model average) | – | **0.37** | `submission_folds_full.csv`; Kaggle's "folds" variant reproduced the local 5-fold submission exactly (same 1,073 filaments, same classifier) |
+
+*Full-data models: no measurable gain on the public LB (all three at 0.37). Decision for the final recipe: optional; add 1–2 only if GPU time is left over at the end.*
 
 *Public LB ≈ 0.87 × local OOF PQ for both models so far (public test subset somewhat harder, plus noise on about 90 images).*
