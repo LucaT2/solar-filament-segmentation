@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import time
+from pathlib import Path
 
 import numpy as np
 
@@ -39,12 +40,14 @@ def main() -> None:
     args = parser.parse_args()
 
     paths = get_data_paths()
-    exp_dir = get_output_dir(args.exp)
+    exp_dir = Path(args.exp) if Path(args.exp).is_dir() else get_output_dir(args.exp)  # name or folder path
     folds = load_folds()
     if args.fold:
         folds = folds[folds.fold.isin(args.fold)]
     available = {p.stem for p in (exp_dir / "oof").glob("*.png")}
     stems = [s for s in folds.stem if s in available]
+    if not stems:
+        raise SystemExit(f"no OOF maps found in {exp_dir / 'oof'}")
     if len(stems) < len(folds):
         print(f"note: OOF maps found for {len(stems)} of {len(folds)} images; scoring those only")
 
