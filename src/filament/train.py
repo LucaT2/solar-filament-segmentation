@@ -29,7 +29,7 @@ from filament.evaluation import GroundTruth, score_components
 from filament.folds import load_folds
 from filament.inference import save_prob
 from filament.metric import score_images
-from filament.model import BCEDiceLoss, build_model, predict_full
+from filament.model import SegLoss, build_model, predict_full
 from filament.paths import get_data_paths, get_output_dir
 from filament.postprocess import find_components
 from filament.preprocess import disk_mask, read_image
@@ -53,6 +53,10 @@ class TrainConfig:
     warmup_epochs: int = 1
     bce_weight: float = 1.0
     dice_weight: float = 1.0
+    skel_weight: float = 0.0  # Skeleton Recall loss weight (0 = off)
+    skel_radius: int = 2  # thickness of the tubed skeleton (diamond dilation radius, px)
+    infer_tile: int | None = None  # full-image prediction in tiles of this size (None = one pass)
+    infer_overlap: int = 128
     amp: str = "fp16"  # fp16 | bf16 | none
     num_workers: int = 4
     val_every: int = 2
@@ -110,7 +114,8 @@ def validate(model, cfg, infos, gt: GroundTruth, device, out_dir: Path | None = 
     futures = []
     for stem in gt.stems:
         x = normalize_with(read_image(infos[stem].path), infos[stem])
-        prob = predict_full([model], x, device, amp_dtype=amp_dtype(cfg.amp))
+        prob = predict_full([model], x, device, amp_dtype=amp_dtype(cfg.amp), tile=cfg.infer_tile,
+                            overlap=cfg.infer_overlap)
         futures.append(pool.submit(score, stem, prob))
     for fut in futures:
         for t, s in fut.result().items():
@@ -139,7 +144,8 @@ def run(cfg: TrainConfig, fold: int) -> dict:
     print(f"image stats for {len(infos)} images in {time.time() - t0:.0f}s")
 
     ds = CropDataset(ann, infos, train_stems, cfg.crop, cfg.samples_per_epoch, cfg.pos_fraction,
-                     build_augment(cfg.augment), seed=cfg.seed + fold)
+                     build_augment(cfg.augment), seed=cfg.seed + fold, skeleton=cfg.skel_weight > 0,
+                     skel_radius=cfg.skel_radius)
     loader = DataLoader(ds, batch_size=cfg.batch_size, shuffle=True, num_workers=cfg.num_workers,
                         pin_memory=True, drop_last=True, persistent_workers=cfg.num_workers > 0)
     gt = GroundTruth(ann, val_stems) if val_stems else None
@@ -148,7 +154,7 @@ def run(cfg: TrainConfig, fold: int) -> dict:
     opt = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda(cfg, len(loader)))
     scaler = torch.amp.GradScaler(enabled=cfg.amp == "fp16" and device.type == "cuda")
-    loss_fn = BCEDiceLoss(cfg.bce_weight, cfg.dice_weight)
+    loss_fn = SegLoss(cfg.bce_weight, cfg.dice_weight, cfg.skel_weight)
     dtype = amp_dtype(cfg.amp)
 
     # fold models: fold<k>.pt; full-data models (fold -1, no validation, last epoch): full_s<seed>.pt

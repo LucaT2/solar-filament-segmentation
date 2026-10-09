@@ -1,0 +1,27 @@
+# Stage 5, step 1 ablation: identical to unet_r34_c1024_skel but WITHOUT the Skeleton Recall loss.
+# Comparing the two isolates the loss's effect; comparing this one with unet_r34 isolates crops + longer training.
+name: unet_r34_c1024
+arch: Unet
+encoder: resnet34
+pretrained: true
+crop: 1024
+batch_size: 4
+epochs: 45
+samples_per_epoch: 1000
+pos_fraction: 0.7
+augment: base
+lr: 0.0005
+weight_decay: 0.0001
+warmup_epochs: 1
+bce_weight: 1.0
+dice_weight: 1.0
+skel_weight: 0.0
+amp: fp16
+num_workers: 4
+val_every: 3
+val_thresholds: [0.3, 0.4, 0.5, 0.6]
+val_min_area: 50
+seed: 42
+wandb: auto
+wandb_project: null
+wandb_entity: null

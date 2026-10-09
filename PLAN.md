@@ -103,10 +103,13 @@ Each step builds on the winner of the previous one; every idea is screened on fo
 with a paired comparison (ΔPQ with a confidence interval), and only winners get a 5-fold run (Kaggle T4×2).
 Cut-off for new architectures: ~Oct 29; then final ensemble, report, repo, form (deadline Nov 15).
 
-- [ ] **Step 0 — tooling:** `scripts/compare.py` (paired ΔPQ + bootstrap CI on the same images); tiled prediction for
-      models that don't fit 2048² in memory; notebook option to run a different config per GPU.
+- [x] **Step 0 — tooling:** `scripts/compare.py` (paired ΔPQ + bootstrap CI on the same images; resolves ~0.01 on one
+      fold: TTA vs no TTA on fold 0 = −0.0106, CI [−0.018, −0.002]); tiled prediction (`infer_tile`); the Kaggle
+      notebook runs a list of EXPERIMENTS spread over the GPUs and compares each with the baseline.
 - [ ] **Step 1 — splits of large filaments:** 1024 px crops + Skeleton Recall loss + longer training (40–50 epochs);
-      ablate if it wins.
+      ablate if it wins. *Implemented:* `configs/unet_r34_c1024_skel.yaml` (crop 1024, batch 4, 45 epochs,
+      skel_weight 1, tube radius 1) and the ablation `configs/unet_r34_c1024.yaml` (same without the loss); fold-0
+      screen pending.
 - [ ] **Step 2 — consensus targets:** average of all annotators' masks as a soft target on multi-annotated images.
 - [ ] **Step 3 — encoders, then decoders:** U-Net with ResNet34 / ConvNeXt-T / EfficientNet-B4 / MiT-B2 → best 1–2
       encoders with U-Net / UNet++ / UPerNet or FPN. Per-encoder learning rate (lower for the encoder).

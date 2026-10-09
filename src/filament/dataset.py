@@ -11,9 +11,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import albumentations as A
+import cv2
 import numpy as np
 import pandas as pd
 import torch
+from skimage.morphology import skeletonize
 from torch.utils.data import Dataset
 
 from filament.preprocess import Disk, find_disk, read_image
@@ -58,7 +60,26 @@ def build_augment(strength: str = "base") -> A.Compose:
     )
 
 
+def tubed_skeleton(mask: np.ndarray, radius: int = 2) -> np.ndarray:
+    """Centre line of every filament, thickened to a thin tube (Skeleton Recall loss target, Kirchhoff et al. 2024).
+
+    The skeleton is dilated with a diamond kernel of ``radius`` so the loss also rewards pixels right next to the
+    exact centre line, which makes it less brittle than a 1-px skeleton.
+    """
+    if not mask.any():
+        return np.zeros_like(mask, dtype=np.uint8)
+    skel = skeletonize(mask > 0).astype(np.uint8)
+    if radius > 0:
+        yy, xx = np.mgrid[-radius : radius + 1, -radius : radius + 1]
+        diamond = (np.abs(yy) + np.abs(xx) <= radius).astype(np.uint8)
+        skel = cv2.dilate(skel, diamond)
+    return skel
+
+
 class CropDataset(Dataset):
+    """Returns ``(x, target)``: x is (1, crop, crop) normalized image; target is (1, crop, crop) mask, or
+    (2, crop, crop) [mask, tubed skeleton] when ``skeleton=True``."""
+
     def __init__(
         self,
         ann: pd.DataFrame,
@@ -69,7 +90,11 @@ class CropDataset(Dataset):
         pos_fraction: float = 0.7,
         augment: A.Compose | None = None,
         seed: int = 0,
+        skeleton: bool = False,
+        skel_radius: int = 2,
     ):
+        self.skeleton = skeleton
+        self.skel_radius = skel_radius
         stems = set(stems)
         sub = ann[ann.stem.isin(stems)]
         self.infos = infos
@@ -121,4 +146,7 @@ class CropDataset(Dataset):
             out = self.augment(image=image, mask=mask)
             image, mask = out["image"], out["mask"]
         x = normalize_with(image, info)[None]
-        return torch.from_numpy(np.ascontiguousarray(x)), torch.from_numpy(np.ascontiguousarray(mask[None])).float()
+        target = mask[None]
+        if self.skeleton:  # computed after augmentation so it always matches the transformed mask
+            target = np.stack([mask, tubed_skeleton(mask, self.skel_radius)])
+        return torch.from_numpy(np.ascontiguousarray(x)), torch.from_numpy(np.ascontiguousarray(target)).float()

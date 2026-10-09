@@ -86,9 +86,11 @@ def main() -> None:
     t0, n = time.time(), 0
     for models, images, cfg in jobs:
         dtype = amp_dtype(cfg.get("amp", "fp16"))
+        tiling = {"tile": cfg.get("infer_tile"), "overlap": cfg.get("infer_overlap", 128)}
         for path in tqdm(images, desc=args.split):
             info = image_info(path)
-            prob = predict_full(models, normalize_with(read_image(path), info), device, tta=args.tta, amp_dtype=dtype)
+            prob = predict_full(models, normalize_with(read_image(path), info), device, tta=args.tta, amp_dtype=dtype,
+                                **tiling)
             save_prob(out_dir, path.stem, prob)
         n += len(images)
     print(f"{n} {args.split} maps (tta={args.tta}) in {time.time() - t0:.0f}s -> {out_dir}")

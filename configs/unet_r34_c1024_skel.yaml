@@ -1,0 +1,29 @@
+# Stage 5, step 1: against splitting of large filaments.
+# Baseline unet_r34 + 1024 px crops (more context) + Skeleton Recall loss + longer training.
+# Pixels per epoch match the baseline (1000 x 1024^2 = 4000 x 512^2); 45 epochs instead of 30.
+name: unet_r34_c1024_skel
+arch: Unet
+encoder: resnet34
+pretrained: true
+crop: 1024
+batch_size: 4
+epochs: 45
+samples_per_epoch: 1000
+pos_fraction: 0.7
+augment: base
+lr: 0.0005
+weight_decay: 0.0001
+warmup_epochs: 1
+bce_weight: 1.0
+dice_weight: 1.0
+skel_weight: 1.0
+skel_radius: 1           # 3 px tube; radius 2 (5 px) would cover ~62% of a typical 8 px wide filament
+amp: fp16
+num_workers: 4
+val_every: 3
+val_thresholds: [0.3, 0.4, 0.5, 0.6]
+val_min_area: 50
+seed: 42
+wandb: auto
+wandb_project: null
+wandb_entity: null
