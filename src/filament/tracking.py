@@ -59,8 +59,10 @@ class Tracker:
             self.run = None
 
 
-def start_run(mode: str, name: str, group: str, job_type: str, config: dict, tags: list[str] | None = None,
+def start_run(mode: str | bool, name: str, group: str, job_type: str, config: dict, tags: list[str] | None = None,
               project: str | None = None, entity: str | None = None) -> Tracker:
+    if isinstance(mode, bool):  # YAML / --set reads off/on as booleans
+        mode = "on" if mode else "off"
     if mode == "off" or os.environ.get("WANDB_MODE") == "disabled":
         return Tracker()
     try:

@@ -151,10 +151,12 @@ def run(cfg: TrainConfig, fold: int) -> dict:
     loss_fn = BCEDiceLoss(cfg.bce_weight, cfg.dice_weight)
     dtype = amp_dtype(cfg.amp)
 
-    ckpt_path = out / (f"fold{fold}.pt" if fold >= 0 else "full.pt")
+    # fold models: fold<k>.pt; full-data models (fold -1, no validation, last epoch): full_s<seed>.pt
+    tag = f"fold{fold}" if fold >= 0 else f"full_s{cfg.seed}"
+    ckpt_path = out / f"{tag}.pt"
     tracker = start_run(
         cfg.wandb,
-        name=f"{cfg.name}-fold{fold}" if fold >= 0 else f"{cfg.name}-full",
+        name=f"{cfg.name}-{tag}",
         group=cfg.name,
         job_type="train",
         config={**asdict(cfg), "fold": fold, "n_train_images": len(train_stems), "n_val_images": len(val_stems),
@@ -190,7 +192,7 @@ def run(cfg: TrainConfig, fold: int) -> dict:
         elif gt is None and epoch == cfg.epochs:
             torch.save({"model": model.state_dict(), "config": asdict(cfg), "epoch": epoch}, ckpt_path)
         log.append(row)
-        pd.DataFrame(log).to_csv(out / f"log_fold{fold}.csv", index=False)
+        pd.DataFrame(log).to_csv(out / f"log_{tag}.csv", index=False)
         tracker.log({**{k.replace("pq@", "val/pq@"): v for k, v in row.items()},
                      "val/pq_best_thr": max((v for k, v in row.items() if k.startswith("pq@")), default=None)},
                     step=epoch)
@@ -202,7 +204,7 @@ def run(cfg: TrainConfig, fold: int) -> dict:
         model.load_state_dict(state["model"])
         final = validate(model, cfg, infos, gt, device, out_dir=out / "oof")  # writes OOF maps of the best model
         result.update({"best_epoch": state["epoch"], "final_pq": final})
-    (out / f"result_fold{fold}.json").write_text(json.dumps(result, indent=2, default=str))
+    (out / f"result_{tag}.json").write_text(json.dumps(result, indent=2, default=str))
     tracker.summary({"best_val_pq": best, "best_epoch": result.get("best_epoch"),
                      **{f"final/pq@{t}": v for t, v in result.get("final_pq", {}).items()}})
     tracker.finish()

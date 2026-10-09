@@ -21,6 +21,7 @@ def main() -> None:
     parser.add_argument("--split", choices=["test", "oof"], default="test")
     parser.add_argument("--no-rescore", action="store_true", help="ignore outputs/<exp>/rescorer.pkl if present")
     parser.add_argument("--out", help="output file name (default: submission.csv / oof_submission.csv)")
+    parser.add_argument("--maps", help="sub-folder of outputs/<exp>/ with the probability maps (default: the split)")
     args = parser.parse_args()
 
     paths = get_data_paths()
@@ -36,13 +37,14 @@ def main() -> None:
                   "in rescorer.json.")
     image_dir = paths.test_images if args.split == "test" else paths.train_images
     stems = sorted(p.stem for p in image_dir.glob("*.jpeg"))
+    maps = exp_dir / (args.maps or args.split)
     if args.split == "oof":  # OOF maps may exist for only some folds so far
-        available = {p.stem for p in (exp_dir / "oof").glob("*.png")}
+        available = {p.stem for p in maps.glob("*.png")}
         if len(available) < len(stems):
             print(f"note: OOF maps for {len(available)} of {len(stems)} training images; writing those only")
         stems = [s for s in stems if s in available]
 
-    sub = probs_to_submission(exp_dir / args.split, stems, cfg, image_dir, rescorer)
+    sub = probs_to_submission(maps, stems, cfg, image_dir, rescorer)
     problems = validate_submission(sub, expected_stems=stems)
     name = args.out or ("submission.csv" if args.split == "test" else "oof_submission.csv")
     path = write_submission(sub, exp_dir / name)

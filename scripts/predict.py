@@ -1,19 +1,24 @@
-"""Predict probability maps with the trained fold models, optionally with flip TTA.
+"""Predict probability maps with trained models, optionally with flip TTA.
 
---split test (default): every test image, averaged over all selected fold models -> outputs/<exp>/test/
---split oof:            each fold model predicts its own validation images        -> outputs/<exp>/oof/
+--split test (default): every test image, averaged over the selected models -> outputs/<exp>/<out or "test">/
+--split oof:            each fold model predicts its own validation images  -> outputs/<exp>/<out or "oof">/
                         (use the same --tta setting as for test, so OOF-tuned post-processing and the
                         component rescorer see identically produced maps)
 
+Models are checkpoint names in outputs/<exp>/: fold0 ... fold4 (cross-validation folds) and full_s<seed>
+(trained on all images). --models accepts names or glob patterns; default for test: all fold models.
+
 Usage:
-    python scripts/predict.py --exp unet_r34 --tta                 # test, all fold*.pt in outputs/unet_r34
+    python scripts/predict.py --exp unet_r34 --tta                                   # 5 fold models -> test/
     python scripts/predict.py --exp unet_r34 --tta --split oof
-    python scripts/predict.py --exp unet_r34 --folds 0 1 --tta
+    python scripts/predict.py --exp unet_r34 --tta --models "full_s*" --out test_full
+    python scripts/predict.py --exp unet_r34 --tta --models "fold*" "full_s*" --out test_folds_full
 """
 
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import time
 
 import torch
@@ -28,12 +33,16 @@ from filament.preprocess import read_image
 from filament.train import amp_dtype
 
 
-def load_models(exp_dir, folds, device):
-    ckpts = sorted(exp_dir.glob("fold*.pt")) + sorted(exp_dir.glob("full.pt"))
-    if folds is not None:
-        ckpts = [c for c in ckpts if c.stem in {f"fold{k}" for k in folds}]
-    if not ckpts:
-        raise FileNotFoundError(f"no checkpoints in {exp_dir}")
+def select_checkpoints(exp_dir, patterns: list[str]) -> list:
+    available = sorted(exp_dir.glob("*.pt"))
+    chosen = [c for c in available if any(fnmatch.fnmatch(c.stem, p) for p in patterns)]
+    if not chosen:
+        raise FileNotFoundError(f"no checkpoints matching {patterns} in {exp_dir} "
+                                f"(available: {[c.stem for c in available]})")
+    return chosen
+
+
+def load_models(ckpts, device):
     models, cfg = [], None
     for path in ckpts:
         state = torch.load(path, map_location=device)
@@ -48,25 +57,30 @@ def load_models(exp_dir, folds, device):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--exp", required=True)
-    parser.add_argument("--folds", type=int, nargs="*")
+    parser.add_argument("--models", nargs="+", default=["fold*"], help="checkpoint names or glob patterns")
+    parser.add_argument("--folds", type=int, nargs="*", help="shorthand for --models fold<k> ...")
     parser.add_argument("--tta", action="store_true", help="average over 4 flips")
     parser.add_argument("--split", choices=["test", "oof"], default="test")
+    parser.add_argument("--out", help="output sub-folder of outputs/<exp>/ (default: the split name)")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     paths = get_data_paths()
     exp_dir = get_output_dir(args.exp)
+    patterns = [f"fold{k}" for k in args.folds] if args.folds is not None else args.models
+    out_dir = exp_dir / (args.out or args.split)
 
     if args.split == "test":
-        models, cfg = load_models(exp_dir, args.folds, device)
+        models, cfg = load_models(select_checkpoints(exp_dir, patterns), device)
         jobs = [(models, sorted(paths.test_images.glob("*.jpeg")), cfg)]
-    else:
+    else:  # OOF: only fold models, each on its own validation images
         folds = load_folds()
-        fold_ids = args.folds if args.folds is not None else sorted(
-            int(p.stem[4:]) for p in exp_dir.glob("fold*.pt"))
         jobs = []
-        for k in fold_ids:
-            models, cfg = load_models(exp_dir, [k], device)
+        for ckpt in select_checkpoints(exp_dir, patterns):
+            if not ckpt.stem.startswith("fold"):
+                continue
+            k = int(ckpt.stem[4:])
+            models, cfg = load_models([ckpt], device)
             jobs.append((models, [paths.train_images / f"{s}.jpeg" for s in folds.stem[folds.fold == k]], cfg))
 
     t0, n = time.time(), 0
@@ -75,9 +89,9 @@ def main() -> None:
         for path in tqdm(images, desc=args.split):
             info = image_info(path)
             prob = predict_full(models, normalize_with(read_image(path), info), device, tta=args.tta, amp_dtype=dtype)
-            save_prob(exp_dir / args.split, path.stem, prob)
+            save_prob(out_dir, path.stem, prob)
         n += len(images)
-    print(f"{n} {args.split} maps (tta={args.tta}) in {time.time() - t0:.0f}s -> {exp_dir / args.split}")
+    print(f"{n} {args.split} maps (tta={args.tta}) in {time.time() - t0:.0f}s -> {out_dir}")
 
 
 if __name__ == "__main__":
