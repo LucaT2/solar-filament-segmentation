@@ -20,6 +20,12 @@ from filament.paths import REPO_ROOT, get_output_dir
 PATTERNS = ["fold*.pt", "full_s*.pt", "postprocess.json", "rescorer.json", "config.yaml", "log_*.csv", "result_*.json"]
 
 
+def subtitle(exp: str) -> str:
+    """Kaggle requires 20-80 characters."""
+    text = f"Solar filament models + OOF maps: {exp}"
+    return (text if len(text) <= 80 else text[:77] + "...").ljust(20)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--exp", required=True)
@@ -45,7 +51,7 @@ def main() -> None:
         "title": slug,
         "id": f"{args.user}/{slug}",
         "licenses": [{"name": "other"}],
-        "subtitle": f"Trained artifacts of experiment {args.exp} (Solar Filament Segmentation Challenge 2026)",
+        "subtitle": subtitle(args.exp),
     }, indent=2))
 
     size = sum(p.stat().st_size for p in dst.rglob("*") if p.is_file()) / 2**20
