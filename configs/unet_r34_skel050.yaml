@@ -1,0 +1,27 @@
+# Stage 5 step 1b: baseline (512 crops, 30 epochs) + Skeleton Recall loss, weight 0.5.
+name: unet_r34_skel050
+arch: Unet
+encoder: resnet34
+pretrained: true
+crop: 512
+batch_size: 8
+epochs: 30
+samples_per_epoch: 4000
+pos_fraction: 0.7
+augment: base
+lr: 0.0005
+weight_decay: 0.0001
+warmup_epochs: 1
+bce_weight: 1.0
+dice_weight: 1.0
+skel_weight: 0.5
+skel_radius: 1
+amp: fp16
+num_workers: 4
+val_every: 2
+val_thresholds: [0.3, 0.4, 0.5, 0.6]
+val_min_area: 50
+seed: 42
+wandb: auto            # auto | on | offline | off
+wandb_project: null    # default: solar-filament-segmentation (or $WANDB_PROJECT)
+wandb_entity: null

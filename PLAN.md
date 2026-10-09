@@ -107,9 +107,12 @@ Cut-off for new architectures: ~Oct 29; then final ensemble, report, repo, form 
       fold: TTA vs no TTA on fold 0 = −0.0106, CI [−0.018, −0.002]); tiled prediction (`infer_tile`); the Kaggle
       notebook runs a list of EXPERIMENTS spread over the GPUs and compares each with the baseline.
 - [ ] **Step 1 — splits of large filaments:** 1024 px crops + Skeleton Recall loss + longer training (40–50 epochs);
-      ablate if it wins. *Implemented:* `configs/unet_r34_c1024_skel.yaml` (crop 1024, batch 4, 45 epochs,
-      skel_weight 1, tube radius 1) and the ablation `configs/unet_r34_c1024.yaml` (same without the loss); fold-0
-      screen pending.
+      ablate if it wins. *Fold-0 screen (2026-10-09/10):* 1024 crops + 45 epochs alone: no effect (−0.004, splits not
+      reduced) → keep 512 crops. Skeleton Recall (weight 1): splits of large filaments 19% → 12%, missed 16.5% →
+      8.5%, but masks too wide (merges 3% → 7.6%); needs a stricter threshold (0.85). With it + classifier: honest
+      fold-0 0.420 (baseline 0.421), **LB 0.37 as a single model** (baseline single model 0.36).
+- [ ] **Step 1b — skeleton weight at 512 crops / 30 epochs:** `unet_r34_skel050` (0.5) and `unet_r34_skel100`
+      (1.0); tuning grid extended to thresholds 0.9. Fold-0 screen with automatic fold-0 submissions.
 - [ ] **Step 2 — consensus targets:** average of all annotators' masks as a soft target on multi-annotated images.
 - [ ] **Step 3 — encoders, then decoders:** U-Net with ResNet34 / ConvNeXt-T / EfficientNet-B4 / MiT-B2 → best 1–2
       encoders with U-Net / UNet++ / UPerNet or FPN. Per-encoder learning rate (lower for the encoder).
@@ -176,6 +179,9 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 | 2026-10-05 | same, cut-off calibrated to the OOF keep rate (min_p 0.297 on test) | 0.425 | **0.37** | `submission_5fold_calibrated.csv`; no visible difference from the uncalibrated one |
 | 2026-10-09 | 2 full-data models (all 707 images, seeds 42/43, last epoch), trained on Kaggle T4×2 | – (no validation) | **0.37** | `outputs/kaggle_runs/solar-fillament_v1/submission_full.csv`; 1,168 filaments; ~70 min per model on a T4 |
 | 2026-10-09 | 5 folds + 2 full-data models (7-model average) | – | **0.37** | `submission_folds_full.csv`; Kaggle's "folds" variant reproduced the local 5-fold submission exactly (same 1,073 filaments, same classifier) |
+
+| 2026-10-10 | fold-0 screen: 1024 crops + 45 epochs (`unet_r34_c1024`), single fold-0 model + classifier | 0.401 (f0); nested 0.411 | 0.36 | paired ΔPQ vs baseline −0.004 [−0.014, +0.006]; splits not reduced |
+| 2026-10-10 | fold-0 screen: + Skeleton Recall w=1 (`unet_r34_c1024_skel`), thr 0.85, single model + classifier | 0.401 (f0, thr 0.85); nested 0.420 | **0.37** | at thr 0.6: ΔPQ −0.021 [−0.036, −0.007] (masks too wide); splits of large filaments 19% → 12%, missed 16.5% → 8.5%, merges 3.0% → 7.6% |
 
 *Full-data models: no measurable gain on the public LB (all three at 0.37). Decision for the final recipe: optional; add 1–2 only if GPU time is left over at the end.*
 

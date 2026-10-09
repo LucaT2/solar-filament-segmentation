@@ -44,6 +44,7 @@ if ($Folds) {
 }
 Step "OOF maps" (@("scripts\predict.py", "--exp", $Exp, "--split", "oof") + $Tta)
 Step "tune post-processing" @("scripts\tune_postprocess.py", "--exp", $Exp, "--thresholds", "0.4", "0.5", "0.6",
+                              "0.7", "0.8", "0.85", "0.9",
                               "--min-areas", "100", "200", "300", "400", "500")
 Step "fit rescorer" @("scripts\fit_rescorer.py", "--exp", $Exp)
 Step "test maps" (@("scripts\predict.py", "--exp", $Exp, "--split", "test") + $Tta)
