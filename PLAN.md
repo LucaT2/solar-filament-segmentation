@@ -113,7 +113,10 @@ Cut-off for new architectures: ~Oct 29; then final ensemble, report, repo, form 
       fold-0 0.420 (baseline 0.421), **LB 0.37 as a single model** (baseline single model 0.36).
 - [x] **Step 1b — skeleton weight at 512 crops / 30 epochs:** fold-0 screen (2026-10-10).
       **`unet_r34_skel050` wins:** ΔPQ +0.010 [−0.001, +0.021], P = 0.96 (threshold 0.9); with classifier 0.435 vs
-      0.421. `unet_r34_skel100`: ±0.000. → 5-fold run of skel050 (folds 1–4 on Kaggle, fold 0 reused) pending.
+      0.421. `unet_r34_skel100`: ±0.000. **5-fold confirmed (2026-10-10):** OOF PQ 0.412 vs 0.403,
+      ΔPQ **+0.010 [+0.005, +0.014]**, P = 1.00 (−430 FP); with classifier 0.436 vs 0.425. Threshold plateau 0.90–0.95
+      on single-model OOF maps; the 5-model test average is ~6% thinner at 0.95, so 0.90 is used for the ensemble.
+      **skel050 is the new baseline.**
 - [x] **Step 2 — consensus targets:** average of all annotators' masks as a soft target on multi-annotated images
       (`target_mode: consensus`). Fold-0 screen vs skel050 (2026-10-10): **no gain**, ΔPQ −0.001 [−0.010, +0.008];
       more conservative (−154 FP, −78 TP), with classifier 0.434 vs 0.435. Kept as a possible ensemble partner.
@@ -198,6 +201,8 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 
 | 2026-10-10 | fold-0 screen: skel050 + consensus targets (`unet_r34_skel050_cons`) | 0.414 (f0); nested 0.434 | 0.37 | vs skel050: ΔPQ −0.001 [−0.010, +0.008]; −154 FP, −78 TP |
 | 2026-10-10 | fold-0 screen: Skeleton Recall w=0.25 (`unet_r34_skel025`) | 0.412 (f0); nested 0.437 | 0.38 | vs skel050: ΔPQ −0.003 [−0.011, +0.006] |
+
+| 2026-10-10 | **skel050, 5 folds** (OOF on 707 images), 5-model avg + TTA + classifier | **0.412**; nested **0.436** | ? | vs unet_r34: ΔPQ +0.010 [+0.005, +0.014]; `submission_skel050_5fold_thr095.csv` (Kaggle, thr 0.95) and `_thr090.csv` (thr 0.90, matched to the ensemble's thinner masks) |
 
 *Full-data models: no measurable gain on the public LB (all three at 0.37). Decision for the final recipe: optional; add 1–2 only if GPU time is left over at the end.*
 
