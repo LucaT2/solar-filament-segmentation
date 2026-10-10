@@ -202,7 +202,7 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 | 2026-10-10 | fold-0 screen: skel050 + consensus targets (`unet_r34_skel050_cons`) | 0.414 (f0); nested 0.434 | 0.37 | vs skel050: ΔPQ −0.001 [−0.010, +0.008]; −154 FP, −78 TP |
 | 2026-10-10 | fold-0 screen: Skeleton Recall w=0.25 (`unet_r34_skel025`) | 0.412 (f0); nested 0.437 | 0.38 | vs skel050: ΔPQ −0.003 [−0.011, +0.006] |
 
-| 2026-10-10 | **skel050, 5 folds** (OOF on 707 images), 5-model avg + TTA + classifier | **0.412**; nested **0.436** | ? | vs unet_r34: ΔPQ +0.010 [+0.005, +0.014]; `submission_skel050_5fold_thr095.csv` (Kaggle, thr 0.95) and `_thr090.csv` (thr 0.90, matched to the ensemble's thinner masks) |
+| 2026-10-10 | **skel050, 5 folds** (OOF on 707 images), 5-model avg + TTA + classifier | **0.412**; nested **0.436** | **0.38** (thr 0.90) / 0.37 (thr 0.95) | vs unet_r34: ΔPQ +0.010 [+0.005, +0.014]; `submission_skel050_5fold_thr095.csv` (Kaggle, thr 0.95) and `_thr090.csv` (thr 0.90, matched to the ensemble's thinner masks) |
 
 *Full-data models: no measurable gain on the public LB (all three at 0.37). Decision for the final recipe: optional; add 1–2 only if GPU time is left over at the end.*
 
