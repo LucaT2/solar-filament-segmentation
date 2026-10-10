@@ -111,8 +111,9 @@ Cut-off for new architectures: ~Oct 29; then final ensemble, report, repo, form 
       reduced) → keep 512 crops. Skeleton Recall (weight 1): splits of large filaments 19% → 12%, missed 16.5% →
       8.5%, but masks too wide (merges 3% → 7.6%); needs a stricter threshold (0.85). With it + classifier: honest
       fold-0 0.420 (baseline 0.421), **LB 0.37 as a single model** (baseline single model 0.36).
-- [ ] **Step 1b — skeleton weight at 512 crops / 30 epochs:** `unet_r34_skel050` (0.5) and `unet_r34_skel100`
-      (1.0); tuning grid extended to thresholds 0.9. Fold-0 screen with automatic fold-0 submissions.
+- [x] **Step 1b — skeleton weight at 512 crops / 30 epochs:** fold-0 screen (2026-10-10).
+      **`unet_r34_skel050` wins:** ΔPQ +0.010 [−0.001, +0.021], P = 0.96 (threshold 0.9); with classifier 0.435 vs
+      0.421. `unet_r34_skel100`: ±0.000. → 5-fold run of skel050 (folds 1–4 on Kaggle, fold 0 reused) pending.
 - [ ] **Step 2 — consensus targets:** average of all annotators' masks as a soft target on multi-annotated images.
 - [ ] **Step 3 — encoders, then decoders:** U-Net with ResNet34 / ConvNeXt-T / EfficientNet-B4 / MiT-B2 → best 1–2
       encoders with U-Net / UNet++ / UPerNet or FPN. Per-encoder learning rate (lower for the encoder).
@@ -182,6 +183,9 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 
 | 2026-10-10 | fold-0 screen: 1024 crops + 45 epochs (`unet_r34_c1024`), single fold-0 model + classifier | 0.401 (f0); nested 0.411 | 0.36 | paired ΔPQ vs baseline −0.004 [−0.014, +0.006]; splits not reduced |
 | 2026-10-10 | fold-0 screen: + Skeleton Recall w=1 (`unet_r34_c1024_skel`), thr 0.85, single model + classifier | 0.401 (f0, thr 0.85); nested 0.420 | **0.37** | at thr 0.6: ΔPQ −0.021 [−0.036, −0.007] (masks too wide); splits of large filaments 19% → 12%, missed 16.5% → 8.5%, merges 3.0% → 7.6% |
+
+| 2026-10-10 | fold-0 screen: Skeleton Recall **w=0.5**, 512 crops, 30 ep (`unet_r34_skel050`), thr 0.9 | **0.415 (f0)**; nested **0.435** | ? | ΔPQ +0.010 [−0.001, +0.021], P(better) 0.96; +61 TP / −61 FN; Mauna Loa +0.028 |
+| 2026-10-10 | fold-0 screen: Skeleton Recall w=1.0, 512 crops, 30 ep (`unet_r34_skel100`), thr 0.9 | 0.405 (f0); nested 0.426 | ? | ΔPQ −0.000 [−0.013, +0.011] |
 
 *Full-data models: no measurable gain on the public LB (all three at 0.37). Decision for the final recipe: optional; add 1–2 only if GPU time is left over at the end.*
 
