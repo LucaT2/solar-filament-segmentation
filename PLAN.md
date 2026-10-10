@@ -124,7 +124,12 @@ Cut-off for new architectures: ~Oct 29; then final ensemble, report, repo, form 
       **recipe stays skel050**.
 - [x] **Step 3a result (2026-10-10, fold 0 vs skel050/ResNet34):** **ConvNeXt-Tiny** ΔPQ **+0.008** [−0.004, +0.018],
       P = 0.92, better outlines (SQ +0.005), −119 FP; with classifier 0.439 vs 0.435. EfficientNet-B4 ΔPQ −0.007
-      [−0.021, +0.006]; with classifier 0.419. (Note: both also use batch 16 / lr 7e-4.) → ConvNeXt-Tiny 5-fold run next.
+      [−0.021, +0.006]; with classifier 0.419. (Note: both also use batch 16 / lr 7e-4.) Decision (user, 2026-10-10):
+      **no 5-fold runs for now**; keep screening architectures on fold 0 (ConvNeXt-T + U-Net is the fold-0 reference).
+- [ ] **Step 3c — transformer encoder (prepared):** MiT-B2 (SegFormer's encoder) + U-Net (`unet_mitb2_skel050`) and
+      the original SegFormer head (`segformer_mitb2_skel050`); encoder lr ×0.1, weight decay 0.01 (SegFormer
+      fine-tuning defaults). Full 2048² inference needs 6.7 GiB (fine on a T4; tiled locally). In the main notebook,
+      in parallel with the decoder screen.
 - [ ] **Step 3b — decoders with ConvNeXt-Tiny** (prepared): UNet++ is incompatible (needs 1/2-res features);
       screen **MAnet** (U-Net + attention, full-res) and **UPerNet** (multi-scale context, 1/4 res) on fold 0 vs
       ConvNeXt + U-Net. Benchmarks at batch 8: U-Net 4.0 GiB / MAnet 4.4 / UPerNet 5.2 / FPN 4.0 / SegFormer 4.4.
