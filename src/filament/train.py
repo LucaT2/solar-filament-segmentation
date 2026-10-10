@@ -49,6 +49,7 @@ class TrainConfig:
     pos_fraction: float = 0.7
     augment: str = "base"
     lr: float = 5e-4
+    encoder_lr_mult: float = 1.0  # encoder learning rate = lr * this (pretrained encoders often prefer < 1)
     weight_decay: float = 1e-4
     warmup_epochs: int = 1
     bce_weight: float = 1.0
@@ -152,7 +153,12 @@ def run(cfg: TrainConfig, fold: int) -> dict:
     gt = GroundTruth(ann, val_stems) if val_stems else None
 
     model = build_model(cfg.arch, cfg.encoder, cfg.pretrained).to(device)
-    opt = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
+    encoder_ids = {id(p) for p in model.encoder.parameters()}
+    param_groups = [
+        {"params": [p for p in model.parameters() if id(p) in encoder_ids], "lr": cfg.lr * cfg.encoder_lr_mult},
+        {"params": [p for p in model.parameters() if id(p) not in encoder_ids], "lr": cfg.lr},
+    ]
+    opt = torch.optim.AdamW(param_groups, lr=cfg.lr, weight_decay=cfg.weight_decay)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda(cfg, len(loader)))
     scaler = torch.amp.GradScaler(enabled=cfg.amp == "fp16" and device.type == "cuda")
     loss_fn = SegLoss(cfg.bce_weight, cfg.dice_weight, cfg.skel_weight)
@@ -185,7 +191,9 @@ def run(cfg: TrainConfig, fold: int) -> dict:
             scaler.update()
             sched.step()
             losses.append(loss.item())
-        row = {"epoch": epoch, "loss": float(np.mean(losses)), "lr": sched.get_last_lr()[0], "train_s": time.time() - t0}
+        lrs = sched.get_last_lr()  # [encoder, decoder]
+        row = {"epoch": epoch, "loss": float(np.mean(losses)), "lr": lrs[-1], "lr_encoder": lrs[0],
+               "train_s": time.time() - t0}
 
         if gt is not None and (epoch % cfg.val_every == 0 or epoch == cfg.epochs):
             t1 = time.time()

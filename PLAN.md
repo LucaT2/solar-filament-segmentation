@@ -118,6 +118,11 @@ Cut-off for new architectures: ~Oct 29; then final ensemble, report, repo, form 
       *Implemented* (`target_mode: consensus`, soft mask + averaged skeleton, sampling unchanged ∝ annotator count):
       `configs/unet_r34_skel050_cons.yaml`; fold-0 screen together with the weight-0.25 sweep (`unet_r34_skel025`)
       in `notebooks/kaggle_screen.ipynb`, compared against skel050, in parallel with skel050's 5-fold run.
+- [ ] **Step 3a — encoder screen (prepared 2026-10-10):** skel050 recipe with `tu-efficientnet_b4`
+      (`configs/unet_effb4_skel050.yaml`) and `tu-convnext_tiny` (`configs/unet_convnext_t_skel050.yaml`), fold 0, one per
+      GPU in `notebooks/kaggle_screen.ipynb`, compared against skel050 (ResNet34). Both: batch 16, lr 7e-4, encoder lr
+      ×0.25 (`encoder_lr_mult`), 2 warm-up epochs. Laptop benchmark at batch 8: EfficientNet-B4 5.8 GiB / ConvNeXt-T
+      4.0 GiB / ResNet34 2.2 GiB; full 2048² inference ~2 GiB for all (no tiling needed).
 - [ ] **Step 3 — encoders, then decoders:** U-Net with ResNet34 / ConvNeXt-T / EfficientNet-B4 / MiT-B2 → best 1–2
       encoders with U-Net / UNet++ / UPerNet or FPN. Per-encoder learning rate (lower for the encoder).
 - [ ] **Step 4 — other architectures** (time-boxed): Mask2Former if splits/grouping still dominate, HRNet or DSCNet if
