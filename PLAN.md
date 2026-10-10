@@ -184,7 +184,7 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 | 2026-10-10 | fold-0 screen: 1024 crops + 45 epochs (`unet_r34_c1024`), single fold-0 model + classifier | 0.401 (f0); nested 0.411 | 0.36 | paired ΔPQ vs baseline −0.004 [−0.014, +0.006]; splits not reduced |
 | 2026-10-10 | fold-0 screen: + Skeleton Recall w=1 (`unet_r34_c1024_skel`), thr 0.85, single model + classifier | 0.401 (f0, thr 0.85); nested 0.420 | **0.37** | at thr 0.6: ΔPQ −0.021 [−0.036, −0.007] (masks too wide); splits of large filaments 19% → 12%, missed 16.5% → 8.5%, merges 3.0% → 7.6% |
 
-| 2026-10-10 | fold-0 screen: Skeleton Recall **w=0.5**, 512 crops, 30 ep (`unet_r34_skel050`), thr 0.9 | **0.415 (f0)**; nested **0.435** | ? | ΔPQ +0.010 [−0.001, +0.021], P(better) 0.96; +61 TP / −61 FN; Mauna Loa +0.028 |
+| 2026-10-10 | fold-0 screen: Skeleton Recall **w=0.5**, 512 crops, 30 ep (`unet_r34_skel050`), thr 0.9 | **0.415 (f0)**; nested **0.435** | **0.38** (single fold-0 model; best so far) | ΔPQ +0.010 [−0.001, +0.021], P(better) 0.96; +61 TP / −61 FN; Mauna Loa +0.028 |
 | 2026-10-10 | fold-0 screen: Skeleton Recall w=1.0, 512 crops, 30 ep (`unet_r34_skel100`), thr 0.9 | 0.405 (f0); nested 0.426 | ? | ΔPQ −0.000 [−0.013, +0.011] |
 
 *Full-data models: no measurable gain on the public LB (all three at 0.37). Decision for the final recipe: optional; add 1–2 only if GPU time is left over at the end.*
