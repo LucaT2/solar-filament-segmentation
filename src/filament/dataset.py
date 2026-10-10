@@ -78,7 +78,14 @@ def tubed_skeleton(mask: np.ndarray, radius: int = 2) -> np.ndarray:
 
 class CropDataset(Dataset):
     """Returns ``(x, target)``: x is (1, crop, crop) normalized image; target is (1, crop, crop) mask, or
-    (2, crop, crop) [mask, tubed skeleton] when ``skeleton=True``."""
+    (2, crop, crop) [mask, tubed skeleton] when ``skeleton=True``.
+
+    Images are drawn with probability proportional to their number of annotators (their weight in the metric).
+    ``target_mode`` decides what the model learns from a drawn image:
+        "random"     one annotator's mask, picked at random (binary target)
+        "consensus"  the average of all annotators' masks (soft target: 0, 1/3, 1/2, 2/3, 1), and the average of
+                     their tubed skeletons, so disputed pixels are taught as "maybe" instead of alternately yes/no
+    """
 
     def __init__(
         self,
@@ -92,9 +99,13 @@ class CropDataset(Dataset):
         seed: int = 0,
         skeleton: bool = False,
         skel_radius: int = 2,
+        target_mode: str = "random",
     ):
+        if target_mode not in ("random", "consensus"):
+            raise ValueError(f"unknown target_mode {target_mode!r}")
         self.skeleton = skeleton
         self.skel_radius = skel_radius
+        self.target_mode = target_mode
         stems = set(stems)
         sub = ann[ann.stem.isin(stems)]
         self.infos = infos
@@ -103,10 +114,15 @@ class CropDataset(Dataset):
         self.pos_fraction = pos_fraction
         self.augment = augment
         self.seed = seed
-        self.items = []
-        for aid, g in sub.groupby("annotator_image", sort=True):
-            centers = np.stack([g.bbox_y + g.bbox_h / 2, g.bbox_x + g.bbox_w / 2], axis=1)
-            self.items.append({"stem": g.stem.iloc[0], "union": rle_union(g.rle.tolist()), "centers": centers})
+        self.items = []  # one per image: every annotator's union mask and filament centres
+        for stem, gs in sub.groupby("stem", sort=True):
+            unions, centers = [], []
+            for _, g in gs.groupby("annotator_image", sort=True):
+                unions.append(rle_union(g.rle.tolist()))
+                centers.append(np.stack([g.bbox_y + g.bbox_h / 2, g.bbox_x + g.bbox_w / 2], axis=1))
+            self.items.append({"stem": stem, "unions": unions, "centers": centers})
+        n_ann = np.array([len(it["unions"]) for it in self.items], dtype=float)
+        self.item_p = n_ann / n_ann.sum()  # == uniform over annotator-images
         self._cache: dict[str, np.ndarray] = {}
 
     def __len__(self) -> int:
@@ -120,9 +136,9 @@ class CropDataset(Dataset):
             self._cache[stem] = read_image(self.infos[stem].path)
         return self._cache[stem]
 
-    def _center(self, rng: np.random.Generator, item: dict, info: ImageInfo) -> tuple[int, int]:
-        if rng.random() < self.pos_fraction and len(item["centers"]):
-            cy, cx = item["centers"][rng.integers(len(item["centers"]))]
+    def _center(self, rng: np.random.Generator, centers: np.ndarray, info: ImageInfo) -> tuple[int, int]:
+        if rng.random() < self.pos_fraction and len(centers):
+            cy, cx = centers[rng.integers(len(centers))]
             jitter = rng.integers(-self.crop // 3, self.crop // 3 + 1, 2)
             return int(cy + jitter[0]), int(cx + jitter[1])
         r = info.disk.radius * np.sqrt(rng.random())
@@ -132,21 +148,30 @@ class CropDataset(Dataset):
     def __getitem__(self, index: int):
         # torch's RNG is seeded per worker and per epoch by the DataLoader, so crops differ across epochs
         rng = np.random.default_rng(int(torch.randint(0, 2**62, (1,)).item()))
-        item = self.items[rng.integers(len(self.items))]
+        item = self.items[rng.choice(len(self.items), p=self.item_p)]
+        if self.target_mode == "random":
+            a = int(rng.integers(len(item["unions"])))
+            unions, centers = [item["unions"][a]], item["centers"][a]
+        else:
+            unions, centers = item["unions"], np.concatenate(item["centers"])
         info = self.infos[item["stem"]]
         img = self._image(item["stem"])
-        cy, cx = self._center(rng, item, info)
+        cy, cx = self._center(rng, centers, info)
         h, w = img.shape
         y0 = int(np.clip(cy - self.crop // 2, 0, h - self.crop))
         x0 = int(np.clip(cx - self.crop // 2, 0, w - self.crop))
         sl = (slice(y0, y0 + self.crop), slice(x0, x0 + self.crop))
         image = img[sl]
-        mask = rle_to_mask(item["union"])[sl].astype(np.uint8)
-        if self.augment is not None:
-            out = self.augment(image=image, mask=mask)
-            image, mask = out["image"], out["mask"]
+        masks = np.stack([rle_to_mask(u)[sl] for u in unions], axis=-1).astype(np.uint8)  # (crop, crop, n)
+        if self.augment is not None:  # one call, so every annotator's mask gets the same geometric transform
+            out = self.augment(image=image, mask=masks)
+            image, masks = out["image"], out["mask"]
+        masks = masks.reshape(self.crop, self.crop, -1)
         x = normalize_with(image, info)[None]
+        mask = masks.mean(axis=-1, dtype=np.float32)
         target = mask[None]
-        if self.skeleton:  # computed after augmentation so it always matches the transformed mask
-            target = np.stack([mask, tubed_skeleton(mask, self.skel_radius)])
+        if self.skeleton:  # computed after augmentation so it always matches the transformed masks
+            skel = np.mean([tubed_skeleton(masks[..., k], self.skel_radius) for k in range(masks.shape[-1])],
+                           axis=0, dtype=np.float32)
+            target = np.stack([mask, skel])
         return torch.from_numpy(np.ascontiguousarray(x)), torch.from_numpy(np.ascontiguousarray(target)).float()

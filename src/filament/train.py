@@ -55,6 +55,7 @@ class TrainConfig:
     dice_weight: float = 1.0
     skel_weight: float = 0.0  # Skeleton Recall loss weight (0 = off)
     skel_radius: int = 2  # thickness of the tubed skeleton (diamond dilation radius, px)
+    target_mode: str = "random"  # random: one annotator's mask per sample | consensus: average of all annotators
     infer_tile: int | None = None  # full-image prediction in tiles of this size (None = one pass)
     infer_overlap: int = 128
     amp: str = "fp16"  # fp16 | bf16 | none
@@ -145,7 +146,7 @@ def run(cfg: TrainConfig, fold: int) -> dict:
 
     ds = CropDataset(ann, infos, train_stems, cfg.crop, cfg.samples_per_epoch, cfg.pos_fraction,
                      build_augment(cfg.augment), seed=cfg.seed + fold, skeleton=cfg.skel_weight > 0,
-                     skel_radius=cfg.skel_radius)
+                     skel_radius=cfg.skel_radius, target_mode=cfg.target_mode)
     loader = DataLoader(ds, batch_size=cfg.batch_size, shuffle=True, num_workers=cfg.num_workers,
                         pin_memory=True, drop_last=True, persistent_workers=cfg.num_workers > 0)
     gt = GroundTruth(ann, val_stems) if val_stems else None

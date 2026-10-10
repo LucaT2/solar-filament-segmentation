@@ -35,6 +35,50 @@ def test_skeleton_recall_rewards_covering_the_centre_line():
     assert SegLoss(skel_weight=0)(gap, target).item() == pytest.approx(BCEDiceLoss()(gap, mask).item())
 
 
+@pytest.fixture(scope="module")
+def three_annotator_dataset(ann, ai):
+    from filament.dataset import CropDataset, image_info
+    from filament.paths import get_data_paths
+
+    stem = ai[ai.n_annotators == 3].stem.iloc[0]
+    infos = {stem: image_info(get_data_paths().train_images / f"{stem}.jpeg")}
+
+    def make(mode, skeleton=False):
+        return CropDataset(ann, infos, [stem], crop=512, samples_per_epoch=30, pos_fraction=1.0,
+                           skeleton=skeleton, skel_radius=1, target_mode=mode)
+
+    return make
+
+
+def test_random_mode_gives_binary_one_annotator_targets(three_annotator_dataset):
+    ds = three_annotator_dataset("random")
+    assert len(ds.items) == 1 and len(ds.items[0]["unions"]) == 3
+    for i in range(10):
+        _, y = ds[i]
+        assert set(torch.unique(y).tolist()) <= {0.0, 1.0}
+
+
+def test_consensus_mode_averages_annotators(three_annotator_dataset):
+    ds = three_annotator_dataset("consensus", skeleton=True)
+    seen = set()
+    for i in range(15):
+        x, y = ds[i]
+        assert y.shape == (2, 512, 512)
+        seen |= {round(v, 3) for v in torch.unique(y[0]).tolist()}
+        assert float(y[1].max()) <= 1.0 and float(y[1].min()) >= 0.0
+    assert seen <= {0.0, 0.333, 0.667, 1.0}
+    assert {0.333, 0.667} & seen  # the annotators disagree somewhere, so partial values must occur
+
+
+def test_sampling_weights_follow_annotator_count(ann, ai):
+    from filament.dataset import CropDataset
+
+    stems = ai.drop_duplicates("stem").groupby("n_annotators").stem.first().tolist()  # one image each with 1, 2, 3
+    ds = CropDataset(ann, {}, stems, samples_per_epoch=1)
+    weights = {len(it["unions"]): p for it, p in zip(ds.items, ds.item_p)}
+    assert weights[2] == pytest.approx(2 * weights[1]) and weights[3] == pytest.approx(3 * weights[1])
+
+
 class _Pointwise(nn.Module):
     """A 'network' with no spatial context: tiled and full-image predictions must agree exactly."""
 

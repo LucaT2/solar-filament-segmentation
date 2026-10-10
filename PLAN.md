@@ -115,6 +115,9 @@ Cut-off for new architectures: ~Oct 29; then final ensemble, report, repo, form 
       **`unet_r34_skel050` wins:** ΔPQ +0.010 [−0.001, +0.021], P = 0.96 (threshold 0.9); with classifier 0.435 vs
       0.421. `unet_r34_skel100`: ±0.000. → 5-fold run of skel050 (folds 1–4 on Kaggle, fold 0 reused) pending.
 - [ ] **Step 2 — consensus targets:** average of all annotators' masks as a soft target on multi-annotated images.
+      *Implemented* (`target_mode: consensus`, soft mask + averaged skeleton, sampling unchanged ∝ annotator count):
+      `configs/unet_r34_skel050_cons.yaml`; fold-0 screen together with the weight-0.25 sweep (`unet_r34_skel025`)
+      in `notebooks/kaggle_screen.ipynb`, compared against skel050, in parallel with skel050's 5-fold run.
 - [ ] **Step 3 — encoders, then decoders:** U-Net with ResNet34 / ConvNeXt-T / EfficientNet-B4 / MiT-B2 → best 1–2
       encoders with U-Net / UNet++ / UPerNet or FPN. Per-encoder learning rate (lower for the encoder).
 - [ ] **Step 4 — other architectures** (time-boxed): Mask2Former if splits/grouping still dominate, HRNet or DSCNet if
