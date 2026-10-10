@@ -122,6 +122,12 @@ Cut-off for new architectures: ~Oct 29; then final ensemble, report, repo, form 
       more conservative (−154 FP, −78 TP), with classifier 0.434 vs 0.435. Kept as a possible ensemble partner.
       Weight sweep: `unet_r34_skel025` ΔPQ −0.003 [−0.011, +0.006] (classifier 0.437) → 0.25–0.5 is a plateau;
       **recipe stays skel050**.
+- [x] **Step 3a result (2026-10-10, fold 0 vs skel050/ResNet34):** **ConvNeXt-Tiny** ΔPQ **+0.008** [−0.004, +0.018],
+      P = 0.92, better outlines (SQ +0.005), −119 FP; with classifier 0.439 vs 0.435. EfficientNet-B4 ΔPQ −0.007
+      [−0.021, +0.006]; with classifier 0.419. (Note: both also use batch 16 / lr 7e-4.) → ConvNeXt-Tiny 5-fold run next.
+- [ ] **Step 3b — decoders with ConvNeXt-Tiny** (prepared): UNet++ is incompatible (needs 1/2-res features);
+      screen **MAnet** (U-Net + attention, full-res) and **UPerNet** (multi-scale context, 1/4 res) on fold 0 vs
+      ConvNeXt + U-Net. Benchmarks at batch 8: U-Net 4.0 GiB / MAnet 4.4 / UPerNet 5.2 / FPN 4.0 / SegFormer 4.4.
 - [ ] **Step 3a — encoder screen (prepared 2026-10-10):** skel050 recipe with `tu-efficientnet_b4`
       (`configs/unet_effb4_skel050.yaml`) and `tu-convnext_tiny` (`configs/unet_convnext_t_skel050.yaml`), fold 0, one per
       GPU in `notebooks/kaggle_screen.ipynb`, compared against skel050 (ResNet34). Both: batch 16, lr 7e-4, encoder lr
@@ -203,6 +209,9 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 | 2026-10-10 | fold-0 screen: Skeleton Recall w=0.25 (`unet_r34_skel025`) | 0.412 (f0); nested 0.437 | 0.38 | vs skel050: ΔPQ −0.003 [−0.011, +0.006] |
 
 | 2026-10-10 | **skel050, 5 folds** (OOF on 707 images), 5-model avg + TTA + classifier | **0.412**; nested **0.436** | **0.38** (thr 0.90) / 0.37 (thr 0.95) | vs unet_r34: ΔPQ +0.010 [+0.005, +0.014]; `submission_skel050_5fold_thr095.csv` (Kaggle, thr 0.95) and `_thr090.csv` (thr 0.90, matched to the ensemble's thinner masks) |
+
+| 2026-10-10 | fold-0 screen: ConvNeXt-Tiny encoder (`unet_convnext_t_skel050`), batch 16 | **0.422 (f0)**; nested **0.439** | ? | vs skel050 (r34): ΔPQ +0.008 [−0.004, +0.018], P 0.92; SQ 0.679 |
+| 2026-10-10 | fold-0 screen: EfficientNet-B4 encoder (`unet_effb4_skel050`), batch 16 | 0.408 (f0); nested 0.419 | ? | vs skel050: ΔPQ −0.007 [−0.021, +0.006] |
 
 *Full-data models: no measurable gain on the public LB (all three at 0.37). Decision for the final recipe: optional; add 1–2 only if GPU time is left over at the end.*
 
