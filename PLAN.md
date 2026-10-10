@@ -114,10 +114,11 @@ Cut-off for new architectures: ~Oct 29; then final ensemble, report, repo, form 
 - [x] **Step 1b — skeleton weight at 512 crops / 30 epochs:** fold-0 screen (2026-10-10).
       **`unet_r34_skel050` wins:** ΔPQ +0.010 [−0.001, +0.021], P = 0.96 (threshold 0.9); with classifier 0.435 vs
       0.421. `unet_r34_skel100`: ±0.000. → 5-fold run of skel050 (folds 1–4 on Kaggle, fold 0 reused) pending.
-- [ ] **Step 2 — consensus targets:** average of all annotators' masks as a soft target on multi-annotated images.
-      *Implemented* (`target_mode: consensus`, soft mask + averaged skeleton, sampling unchanged ∝ annotator count):
-      `configs/unet_r34_skel050_cons.yaml`; fold-0 screen together with the weight-0.25 sweep (`unet_r34_skel025`)
-      in `notebooks/kaggle_screen.ipynb`, compared against skel050, in parallel with skel050's 5-fold run.
+- [x] **Step 2 — consensus targets:** average of all annotators' masks as a soft target on multi-annotated images
+      (`target_mode: consensus`). Fold-0 screen vs skel050 (2026-10-10): **no gain**, ΔPQ −0.001 [−0.010, +0.008];
+      more conservative (−154 FP, −78 TP), with classifier 0.434 vs 0.435. Kept as a possible ensemble partner.
+      Weight sweep: `unet_r34_skel025` ΔPQ −0.003 [−0.011, +0.006] (classifier 0.437) → 0.25–0.5 is a plateau;
+      **recipe stays skel050**.
 - [ ] **Step 3a — encoder screen (prepared 2026-10-10):** skel050 recipe with `tu-efficientnet_b4`
       (`configs/unet_effb4_skel050.yaml`) and `tu-convnext_tiny` (`configs/unet_convnext_t_skel050.yaml`), fold 0, one per
       GPU in `notebooks/kaggle_screen.ipynb`, compared against skel050 (ResNet34). Both: batch 16, lr 7e-4, encoder lr
@@ -194,6 +195,9 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 
 | 2026-10-10 | fold-0 screen: Skeleton Recall **w=0.5**, 512 crops, 30 ep (`unet_r34_skel050`), thr 0.9 | **0.415 (f0)**; nested **0.435** | **0.38** (single fold-0 model; best so far) | ΔPQ +0.010 [−0.001, +0.021], P(better) 0.96; +61 TP / −61 FN; Mauna Loa +0.028 |
 | 2026-10-10 | fold-0 screen: Skeleton Recall w=1.0, 512 crops, 30 ep (`unet_r34_skel100`), thr 0.9 | 0.405 (f0); nested 0.426 | ? | ΔPQ −0.000 [−0.013, +0.011] |
+
+| 2026-10-10 | fold-0 screen: skel050 + consensus targets (`unet_r34_skel050_cons`) | 0.414 (f0); nested 0.434 | ? | vs skel050: ΔPQ −0.001 [−0.010, +0.008]; −154 FP, −78 TP |
+| 2026-10-10 | fold-0 screen: Skeleton Recall w=0.25 (`unet_r34_skel025`) | 0.412 (f0); nested 0.437 | ? | vs skel050: ΔPQ −0.003 [−0.011, +0.006] |
 
 *Full-data models: no measurable gain on the public LB (all three at 0.37). Decision for the final recipe: optional; add 1–2 only if GPU time is left over at the end.*
 
