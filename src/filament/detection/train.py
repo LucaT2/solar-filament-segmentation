@@ -66,6 +66,7 @@ class DetTrainConfig:
     val_mask_threshold: float = 0.5
     val_score_thresholds: list = field(default_factory=lambda: [0.3, 0.5, 0.7])
     val_min_area: int = 100
+    log_every: int = 50  # print progress every this many steps (0 = only per epoch)
     seed: int = 42
     wandb: str = "auto"  # auto | on | offline | off (see filament.tracking)
     wandb_project: str | None = None
@@ -122,7 +123,13 @@ def validate(model, cfg: DetTrainConfig, infos, gt: GroundTruth, device, out_dir
     return {t: score_images(s).pq for t, s in per_thr.items()}
 
 
+def stamp(msg: str, t_start: float) -> None:
+    print(f"[{time.strftime('%H:%M:%S')} +{time.time() - t_start:5.0f}s] {msg}", flush=True)
+
+
 def run(cfg: DetTrainConfig, fold: int) -> dict:
+    t_start = time.time()
+    stamp(f"{cfg.name} fold {fold}: starting", t_start)
     torch.manual_seed(cfg.seed + fold)
     np.random.seed(cfg.seed + fold)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -138,15 +145,18 @@ def run(cfg: DetTrainConfig, fold: int) -> dict:
     t0 = time.time()
     with ThreadPoolExecutor(8) as pool:
         infos = {i.stem: i for i in pool.map(image_info, [paths.train_images / f"{s}.jpeg" for s in folds.stem])}
-    print(f"image stats for {len(infos)} images in {time.time() - t0:.0f}s")
+    stamp(f"image stats for {len(infos)} images in {time.time() - t0:.0f}s", t_start)
 
     ds = InstanceCropDataset(ann, infos, train_stems, cfg.crop, cfg.samples_per_epoch, cfg.pos_fraction,
                              build_augment(cfg.augment), cfg.min_instance_area, guide_dir(cfg, "oof"))
     loader = DataLoader(ds, batch_size=cfg.batch_size, shuffle=True, num_workers=cfg.num_workers, pin_memory=True,
                         drop_last=True, persistent_workers=cfg.num_workers > 0, collate_fn=collate)
     gt = GroundTruth(ann, val_stems) if val_stems else None
+    stamp(f"data ready: {len(ds.items)} training annotator-images, {len(val_stems)} validation images, "
+          f"guide {guide_dir(cfg, 'oof')}", t_start)
 
     model = build_from_config(cfg).to(device)
+    stamp(f"model ready on {device}", t_start)
     params = [p for p in model.parameters() if p.requires_grad]
     opt = torch.optim.AdamW(params, lr=cfg.lr, weight_decay=cfg.weight_decay)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda(cfg, len(loader)))
@@ -161,12 +171,17 @@ def run(cfg: DetTrainConfig, fold: int) -> dict:
                 "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else "cpu"},
         tags=["maskrcnn"], project=cfg.wandb_project, entity=cfg.wandb_entity,
     )
+    stamp(f"tracking: {tracker.run.url if tracker.active else 'off'}; training {len(loader)} steps per epoch", t_start)
     best, log = -1.0, []
     for epoch in range(1, cfg.epochs + 1):
         model.train()
         set_input_size(model, cfg.crop)
         t0, losses, parts, skipped = time.time(), [], {}, 0
-        for images, targets in loader:
+        for step, (images, targets) in enumerate(loader, 1):
+            if cfg.log_every and (step % cfg.log_every == 0 or (epoch == 1 and step == 1)):
+                recent = f"{np.mean(losses[-cfg.log_every:]):.4f}" if losses else "-"
+                stamp(f"epoch {epoch} step {step}/{len(loader)}: loss {recent}, "
+                      f"{(time.time() - t0) / step:.2f} s/step", t_start)
             images = [im.to(device, non_blocking=True) for im in images]
             targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
             with torch.autocast(device.type, dtype=dtype, enabled=dtype is not None and device.type == "cuda"):

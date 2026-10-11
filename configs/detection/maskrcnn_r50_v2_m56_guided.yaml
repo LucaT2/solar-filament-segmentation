@@ -16,7 +16,7 @@ guide_test_maps: test_fold0   # fold-0 model's test maps: same kind of map as th
 detections_per_img: 100
 crop: 1024
 batch_size: 4
-epochs: 24
+epochs: 16
 samples_per_epoch: 2000
 pos_fraction: 0.8
 min_instance_area: 30

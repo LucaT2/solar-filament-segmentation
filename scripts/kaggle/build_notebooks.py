@@ -62,8 +62,12 @@ REPO_DATASET = None                    # alternative to the GitHub token: name o
 
 md("## 1. Setup")
 code("""
-import os, sys, shutil, subprocess, glob, json
+import os, sys, shutil, subprocess, glob, json, time
 from pathlib import Path
+
+T0 = time.time()
+def log(msg):   # timestamped progress, so a stalled step is easy to spot in the log
+    print(f"[{time.strftime('%H:%M:%S')} +{time.time() - T0:5.0f}s] {msg}", flush=True)
 
 from kaggle_secrets import UserSecretsClient
 secrets = UserSecretsClient()
@@ -71,10 +75,10 @@ secrets = UserSecretsClient()
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 try:   # optional W&B tracking; training subprocesses inherit the environment variable
     os.environ["WANDB_API_KEY"] = secrets.get_secret(WANDB_SECRET)
-    print("W&B tracking enabled")
+    log("W&B tracking enabled")
 except Exception:
     os.environ["WANDB_MODE"] = "disabled"
-    print(f"no '{WANDB_SECRET}' secret: tracking disabled")
+    log(f"no '{WANDB_SECRET}' secret: tracking disabled")
 
 def github_token():
     try:
@@ -106,7 +110,7 @@ elif not REPO.exists():
             "git clone failed: " + res.stderr.replace(token, "***") +
             "\\nCheck the GitHub token: not expired; 'Repository access' includes solar-filament-segmentation; "
             "'Repository permissions -> Contents: Read-only'.")
-print(subprocess.run(["git", "-C", str(REPO), "log", "--oneline", "-1"], capture_output=True, text=True).stdout)
+log("repo: " + subprocess.run(["git", "-C", str(REPO), "log", "--oneline", "-1"], capture_output=True, text=True).stdout.strip())
 """)
 code("""
 # Kaggle images ship torch, numpy, pandas, opencv, scikit-image, scikit-learn, timm and wandb. Install only what is
@@ -117,8 +121,10 @@ sys.path.insert(0, str(REPO / "src"))
 os.chdir(REPO)
 
 import torch, yaml
-print("torch", torch.__version__, "| GPUs:", [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())])
+log(f"packages installed; torch {torch.__version__}, "
+    f"GPUs {[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]}")
 !python scripts/setup/check_env.py
+log("environment checked")
 """)
 code("""
 WORK = Path("/kaggle/working")
@@ -141,7 +147,7 @@ def load_checkpoint_dataset(name):
                 f.rename(sub / f.name)
             nested.rmdir()
     folders = {d.name: len(list(d.iterdir())) for d in sorted(dst.iterdir()) if d.is_dir()}
-    print(f"{name} -> {dst}: {sorted(p.name for p in dst.glob('*.pt'))} | prediction folders: {folders}")
+    log(f"{name} -> {dst}: {sorted(p.name for p in dst.glob('*.pt'))} | prediction folders: {folders}")
     return exp
 
 loaded = [load_checkpoint_dataset(n) for n in CHECKPOINT_DATASETS]
@@ -160,6 +166,8 @@ def kind_of(exp):
 if any(e["kind"] == "detection" for e in EXPERIMENTS):   # download the COCO weights once, before parallel jobs
     from torchvision.models.detection import MaskRCNN_ResNet50_FPN_V2_Weights
     MaskRCNN_ResNet50_FPN_V2_Weights.DEFAULT.get_state_dict(progress=False)
+    log("Mask R-CNN COCO weights downloaded")
+log("setup done")
 """)
 
 md("""
@@ -192,8 +200,27 @@ for gpu in range(n_gpu):
     env = {**os.environ, "CUDA_VISIBLE_DEVICES": str(gpu), "PYTHONUNBUFFERED": "1"}
     procs.append((subprocess.Popen(["bash", "-c", script], env=env, stdout=log, stderr=subprocess.STDOUT), log, gpu))
     print(f"GPU {gpu}: {[' '.join(j[2:5]) for j in my_jobs]}")
+
+# Watch the jobs: every few minutes print each GPU's latest log line (visible live in the Kaggle viewer), and warn
+# when a log has not changed for a long time.
+import time
+POLL_S, STALL_S = 120, 1200
+last_change = {gpu: (time.time(), 0) for _, _, gpu in procs}
+while any(p.poll() is None for p, _, _ in procs):
+    time.sleep(POLL_S)
+    for p, _, gpu in procs:
+        path = WORK / f"train_gpu{gpu}.log"
+        size = path.stat().st_size
+        lines = [l for l in path.read_text(errors="replace").splitlines() if l.strip() and "wandb:" not in l]
+        if size != last_change[gpu][1]:
+            last_change[gpu] = (time.time(), size)
+        quiet = time.time() - last_change[gpu][0]
+        state = "running" if p.poll() is None else f"done (exit {p.returncode})"
+        warn = f"  !! no new output for {quiet / 60:.0f} min" if quiet > STALL_S and p.poll() is None else ""
+        print(f"{time.strftime('%H:%M:%S')} GPU {gpu} {state}: {lines[-1][:160] if lines else '(no output yet)'}{warn}",
+              flush=True)
 for p, log, gpu in procs:
-    p.wait(); log.close()
+    log.close()
     print(f"GPU {gpu} finished with exit code {p.returncode}")
     print("".join(open(WORK / f"train_gpu{gpu}.log").readlines()[-4:]))
 """)

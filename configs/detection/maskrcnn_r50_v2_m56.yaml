@@ -10,7 +10,7 @@ mask_size: 56
 detections_per_img: 100
 crop: 1024
 batch_size: 4
-epochs: 24
+epochs: 16
 samples_per_epoch: 2000
 pos_fraction: 0.8
 min_instance_area: 30
