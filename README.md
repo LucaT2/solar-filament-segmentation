@@ -103,15 +103,16 @@ python scripts/postprocess/make_submission.py --exp ens         # -> outputs/ens
 The classical baseline replaces step 1 with `python scripts/segmentation/run_classical.py` (experiment `classical`).
 
 **Instance models (Mask R-CNN)** save raw detections per image (`<stem>.npz`: boxes, scores, 28×28 soft masks)
-instead of probability maps. They go through the same steps 3–4, where `--thresholds` become mask thresholds and
+instead of probability maps. A *guided* model (config `guide`) also takes a segmentation experiment's OOF
+probability map as a second input channel. Detection experiments go through the same steps 3–4, where `--thresholds` become mask thresholds and
 `--min-scores` detection-score cut-offs:
 
 ```bash
-python scripts/detection/train.py --config configs/detection/maskrcnn_r50_v2.yaml --fold 0   # also writes oof/*.npz
-python scripts/detection/predict.py --exp maskrcnn_r50_v2 --folds 0                          # test/*.npz
-python scripts/postprocess/tune_postprocess.py --exp maskrcnn_r50_v2 --thresholds 0.4 0.5 0.6 --min-scores 0.5 0.7 0.9
-python scripts/evaluation/compare.py --a unet_convnext_t_skel050 --b maskrcnn_r50_v2
-python scripts/postprocess/make_submission.py --exp maskrcnn_r50_v2
+python scripts/detection/train.py --config configs/detection/maskrcnn_r50_v2_m56.yaml --fold 0   # also writes oof/*.npz
+python scripts/detection/predict.py --exp maskrcnn_r50_v2_m56 --folds 0                          # test/*.npz
+python scripts/postprocess/tune_postprocess.py --exp maskrcnn_r50_v2_m56 --thresholds 0.4 0.5 0.6 --min-scores 0.5 0.7 0.9
+python scripts/evaluation/compare.py --a unet_convnext_t_skel050 --b maskrcnn_r50_v2_m56
+python scripts/postprocess/make_submission.py --exp maskrcnn_r50_v2_m56
 ```
 
 **Tracking:** training and tuning runs are logged to Weights & Biases (project `solar-filament-segmentation`, one run

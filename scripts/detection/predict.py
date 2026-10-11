@@ -7,6 +7,9 @@
 With several models (e.g. 5 folds on the test set), their detections are pooled into one list per image; the
 overlap rule in post-processing then keeps the highest-scoring copy of each filament.
 
+Guided models (config ``guide``) read the guide experiment's maps: its oof/ maps for --split oof, and for the test set
+the folder named by the config's ``guide_test_maps`` (default test/; override with --guide-maps).
+
 The saved predictions are post-processed like probability maps: scripts/postprocess/tune_postprocess.py,
 scripts/evaluation/compare.py and scripts/postprocess/make_submission.py work on them unchanged.
 
@@ -26,12 +29,12 @@ import torch
 from tqdm import tqdm
 
 from filament.data.folds import load_folds
-from filament.data.images import read_image
+from filament.detection.dataset import full_image_input
 from filament.detection.instances import Instances, save_instances
 from filament.detection.model import predict_instances
-from filament.detection.train import build_from_config
+from filament.detection.train import build_from_config, guide_dir
 from filament.paths import get_data_paths, resolve_exp_dir
-from filament.segmentation.dataset import image_info, normalize_with
+from filament.segmentation.dataset import image_info
 from filament.segmentation.train import amp_dtype
 
 
@@ -70,6 +73,8 @@ def main() -> None:
     parser.add_argument("--folds", type=int, nargs="*", help="shorthand for --models fold<k> ...")
     parser.add_argument("--split", choices=["test", "oof"], default="test")
     parser.add_argument("--out", help="output sub-folder of outputs/<exp>/ (default: the split name)")
+    parser.add_argument("--guide-maps", help="for guided models: sub-folder of the guide experiment with the maps "
+                                             "(default: oof/, or the config's guide_test_maps for the test set)")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -93,8 +98,13 @@ def main() -> None:
     t0, n = time.time(), 0
     for models, images, cfg in jobs:
         dtype = amp_dtype(cfg.get("amp", "fp16"))
+        guides = guide_dir(cfg, args.split)
+        if guides is not None and args.guide_maps:
+            guides = guides.parent / args.guide_maps
+        if guides is not None:
+            print(f"guide maps: {guides}")
         for path in tqdm(images, desc=args.split):
-            x = normalize_with(read_image(path), image_info(path))
+            x = full_image_input(image_info(path), guides)
             save_instances(out_dir, path.stem, pooled([predict_instances(m, x, device, dtype) for m in models]))
         n += len(images)
     print(f"{n} {args.split} predictions in {time.time() - t0:.0f}s -> {out_dir}")

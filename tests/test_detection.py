@@ -98,6 +98,34 @@ def test_instance_dataset_targets_are_valid(ann, ai):
     assert t["boxes"].shape == (0, 4) and t["masks"].shape == (0, 512, 512) and len(t["labels"]) == 0
 
 
+def test_guide_map_stays_aligned_with_the_instances(ann, ai, tmp_path):
+    """Use the ground truth itself as the 'guide': after cropping and augmentation, the guide channel must still
+    sit exactly on the instance masks."""
+    import cv2
+
+    from filament.data.rle import rle_to_mask
+    from filament.detection.dataset import InstanceCropDataset, full_image_input
+    from filament.paths import get_data_paths
+    from filament.segmentation.dataset import build_augment, image_info
+
+    stem = ai[ai.n_annotators == 1].stem.iloc[0]  # one annotator: the guide equals every sample's instances
+    union = np.zeros((2048, 2048), np.uint8)
+    for r in ann[ann.stem == stem].rle:
+        union |= rle_to_mask(r).astype(np.uint8)
+    cv2.imwrite(str(tmp_path / f"{stem}.png"), union * 255)
+    info = image_info(get_data_paths().train_images / f"{stem}.jpeg")
+    ds = InstanceCropDataset(ann, {stem: info}, [stem], crop=512, samples_per_epoch=8, pos_fraction=1.0,
+                             augment=build_augment("base"), min_instance_area=1, guide_dir=tmp_path)
+    for i in range(8):
+        x, t = ds[i]
+        guide = x[1] > 0  # guide 1 -> +2, guide 0 -> -2
+        inst = t["masks"].any(0) if len(t["masks"]) else torch.zeros_like(guide)
+        assert torch.equal(guide, inst)
+        assert torch.equal(x[0], x[2])  # the image channels stay identical
+    full = full_image_input(info, tmp_path)
+    assert full.shape == (3, 2048, 2048) and (full[1] > 0).sum() == union.sum()
+
+
 def test_maskrcnn_trains_and_predicts_raw_instances():
     from filament.detection.model import build_maskrcnn, predict_instances, set_input_size
 

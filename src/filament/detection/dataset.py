@@ -7,11 +7,17 @@ outlining filaments.
 
 Filaments cut by the crop edge are kept if at least ``min_instance_area`` pixels remain; boxes are recomputed from the
 (augmented) masks.
+
+With ``guide_dir``, a segmentation model's out-of-fold probability map of the same image is cropped and augmented
+together with it and becomes the second input channel (see ``filament.detection.model.make_input``).
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import albumentations as A
+import cv2
 import numpy as np
 import pandas as pd
 import torch
@@ -19,7 +25,20 @@ from torch.utils.data import Dataset
 
 from filament.data.images import read_image
 from filament.data.rle import rle_to_mask
+from filament.detection.model import make_input
 from filament.segmentation.dataset import ImageInfo, normalize_with
+
+
+def full_image_input(info: ImageInfo, guide_dir: Path | None = None) -> np.ndarray:
+    """(3, 2048, 2048) model input for a whole image, with the guide map from ``guide_dir`` if given."""
+    guide = None
+    if guide_dir is not None:
+        path = Path(guide_dir) / f"{info.stem}.png"
+        raw = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+        if raw is None:
+            raise FileNotFoundError(f"guide map missing: {path}")
+        guide = raw.astype(np.float32) / 255
+    return make_input(normalize_with(read_image(info.path), info), guide)
 
 
 def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
@@ -45,8 +64,15 @@ class InstanceCropDataset(Dataset):
         pos_fraction: float = 0.8,
         augment: A.Compose | None = None,
         min_instance_area: int = 30,
+        guide_dir: Path | None = None,
     ):
         sub = ann[ann.stem.isin(set(stems))]
+        self.guide_dir = Path(guide_dir) if guide_dir is not None else None
+        if self.guide_dir is not None:
+            missing = sorted(set(sub.stem) - {p.stem for p in self.guide_dir.glob("*.png")})
+            if missing:
+                raise FileNotFoundError(f"{len(missing)} training images have no guide map in {self.guide_dir}, "
+                                        f"e.g. {missing[:3]}")
         self.infos = infos
         self.crop = crop
         self.samples_per_epoch = samples_per_epoch
@@ -62,11 +88,15 @@ class InstanceCropDataset(Dataset):
     def __len__(self) -> int:
         return self.samples_per_epoch
 
-    def _image(self, stem: str) -> np.ndarray:
+    def _image(self, stem: str) -> tuple[np.ndarray, np.ndarray | None]:
+        """The image and (with a guide) its uint8 probability map, cached per worker."""
         if stem not in self._cache:
             if len(self._cache) >= 16:
                 self._cache.pop(next(iter(self._cache)))
-            self._cache[stem] = read_image(self.infos[stem].path)
+            guide = None
+            if self.guide_dir is not None:
+                guide = cv2.imread(str(self.guide_dir / f"{stem}.png"), cv2.IMREAD_UNCHANGED)
+            self._cache[stem] = (read_image(self.infos[stem].path), guide)
         return self._cache[stem]
 
     def _center(self, rng: np.random.Generator, centers: np.ndarray, info: ImageInfo) -> tuple[int, int]:
@@ -82,30 +112,34 @@ class InstanceCropDataset(Dataset):
         rng = np.random.default_rng(int(torch.randint(0, 2**62, (1,)).item()))
         item = self.items[rng.integers(len(self.items))]
         info = self.infos[item["stem"]]
-        img = self._image(item["stem"])
+        img, guide = self._image(item["stem"])
         cy, cx = self._center(rng, item["centers"], info)
         h, w = img.shape
         y0 = int(np.clip(cy - self.crop // 2, 0, h - self.crop))
         x0 = int(np.clip(cx - self.crop // 2, 0, w - self.crop))
         sl = (slice(y0, y0 + self.crop), slice(x0, x0 + self.crop))
         image = img[sl]
-        masks = [m for m in (rle_to_mask(r)[sl] for r in item["rles"]) if m.any()]
-        stack = np.stack(masks, axis=-1).astype(np.uint8) if masks else np.zeros((self.crop, self.crop, 0), np.uint8)
+        layers = [m for m in (rle_to_mask(r)[sl] for r in item["rles"]) if m.any()]
+        n_inst = len(layers)
+        if guide is not None:  # rides along as one more mask layer: same flips/rotations, no intensity changes
+            layers.append(guide[sl])
+        stack = np.stack(layers, axis=-1).astype(np.uint8) if layers else np.zeros((self.crop, self.crop, 0), np.uint8)
         if self.augment is not None:
             if stack.shape[-1]:
                 out = self.augment(image=image, mask=stack)
                 image, stack = out["image"], out["mask"].reshape(self.crop, self.crop, -1)
             else:
                 image = self.augment(image=image)["image"]
-        inst = np.moveaxis(stack, -1, 0)
+        inst = np.moveaxis(stack[..., :n_inst], -1, 0)
         inst = inst[inst.sum(axis=(1, 2)) >= self.min_instance_area]
-        x = normalize_with(image, info)
+        prob = stack[..., n_inst].astype(np.float32) / 255 if guide is not None else None
+        x = make_input(normalize_with(image, info), prob)
         target = {
             "boxes": torch.from_numpy(masks_to_boxes(inst)).reshape(-1, 4),
             "labels": torch.ones(len(inst), dtype=torch.int64),
             "masks": torch.from_numpy(np.ascontiguousarray(inst)),
         }
-        return torch.from_numpy(np.ascontiguousarray(x))[None].expand(3, -1, -1).contiguous(), target
+        return torch.from_numpy(x), target
 
 
 def collate(batch):

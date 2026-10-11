@@ -49,20 +49,34 @@ def set_input_size(model: nn.Module, size: int) -> None:
     model.transform.max_size = size
 
 
+def make_input(x: np.ndarray, guide: np.ndarray | None = None) -> np.ndarray:
+    """(3, H, W) model input from a normalized image and, optionally, a segmentation model's probability map.
+
+    Without a guide, the gray image fills all three channels (what the COCO weights expect: three similar channels).
+    With a guide, the middle channel is the probability map, scaled to about the image's range ([0, 1] -> [-2, 2]),
+    so the detector starts from the U-Net's per-pixel answer and learns to group it into filaments and to score them.
+    """
+    x = x.astype(np.float32)
+    middle = x if guide is None else (guide.astype(np.float32) - 0.5) * 4
+    return np.ascontiguousarray(np.stack([x, middle, x]))
+
+
 def to_input(x: np.ndarray, device) -> torch.Tensor:
-    """(H, W) normalized float image -> (3, H, W) tensor on ``device``."""
-    return torch.from_numpy(np.ascontiguousarray(x, dtype=np.float32)).to(device)[None].expand(3, -1, -1)
+    """(H, W) normalized image or (3, H, W) ``make_input`` output -> (3, H, W) tensor on ``device``."""
+    x = make_input(x) if x.ndim == 2 else x
+    return torch.from_numpy(np.ascontiguousarray(x, dtype=np.float32)).to(device)
 
 
 @torch.no_grad()
 def predict_instances(model: nn.Module, x: np.ndarray, device, amp_dtype=None) -> Instances:
-    """Raw detections for one normalized image: boxes, scores and the M x M soft masks (not pasted).
+    """Raw detections for one image: boxes, scores and the M x M soft masks (not pasted).
 
+    ``x`` is a normalized (H, W) image or a (3, H, W) ``make_input`` array (with a guide map).
     Runs the model's stages directly instead of ``model(images)``, which would paste every mask into a full-size
     float image (100 detections x 2048 x 2048 floats).
     """
     model.eval()
-    h, w = x.shape
+    h, w = x.shape[-2:]
     set_input_size(model, max(h, w))
     with torch.autocast(device.type, dtype=amp_dtype, enabled=amp_dtype is not None and device.type == "cuda"):
         images, _ = model.transform([to_input(x, device)])

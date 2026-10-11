@@ -1,5 +1,8 @@
-# As maskrcnn_r50_v2, but the mask head predicts 56 x 56 instead of 28 x 28 masks (RoI 28 instead of 14): finer
-# outlines for thin filaments, the known weak spot of Mask R-CNN. ~5 GiB peak at batch 4 (1024 px crops).
+# Step 4: first instance model. torchvision Mask R-CNN ResNet50-FPN v2 (COCO weights), heads for 1 class.
+# Mask head at 56 x 56 instead of torchvision's 28 x 28 (RoI 28 instead of 14): finer outlines for thin filaments,
+# the known weak spot of Mask R-CNN. ~5 GiB peak at batch 4. Trained on 1024 px crops at native resolution (no
+# resizing), predicted on full 2048 px images; same augmentations and annotator sampling as the U-Net. Raw detections
+# are saved; mask threshold and score cut-off are tuned afterwards on OOF PQ (scripts/postprocess/tune_postprocess.py).
 name: maskrcnn_r50_v2_m56
 pretrained: true
 trainable_layers: 3

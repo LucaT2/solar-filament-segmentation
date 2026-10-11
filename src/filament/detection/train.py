@@ -26,14 +26,14 @@ from torch.utils.data import DataLoader
 
 from filament.data.annotations import annotation_table, load_coco
 from filament.data.folds import load_folds
-from filament.data.images import disk_mask, read_image
-from filament.detection.dataset import InstanceCropDataset, collate
+from filament.data.images import disk_mask
+from filament.detection.dataset import InstanceCropDataset, collate, full_image_input
 from filament.detection.instances import save_instances, to_components
 from filament.detection.model import build_maskrcnn, predict_instances, set_input_size
 from filament.evaluation.metric import score_images
 from filament.evaluation.scoring import GroundTruth, score_components
-from filament.paths import get_data_paths, get_output_dir
-from filament.segmentation.dataset import build_augment, image_info, normalize_with
+from filament.paths import get_data_paths, get_output_dir, resolve_exp_dir
+from filament.segmentation.dataset import build_augment, image_info
 from filament.segmentation.train import amp_dtype, lr_lambda
 from filament.tracking import start_run
 
@@ -44,6 +44,10 @@ class DetTrainConfig:
     pretrained: bool = True  # COCO weights
     trainable_layers: int = 3  # ResNet stages fine-tuned (0-5); the rest stay frozen
     mask_size: int = 28  # mask head output (28 = torchvision default; 56 = finer, more memory)
+    guide: str | None = None  # segmentation experiment whose probability maps become the 2nd input channel
+    # (its oof/ maps for training images; OOF, so no image's guide comes from a model that saw its labels)
+    guide_test_maps: str = "test"  # the guide's folder with test maps. Training sees single-model OOF maps, so
+    # single-model test maps (e.g. test_fold0) match them better than a softer multi-fold average
     detections_per_img: int = 100
     crop: int = 1024
     batch_size: int = 4
@@ -85,9 +89,19 @@ def build_from_config(cfg: dict | DetTrainConfig, pretrained: bool | None = None
                           c["detections_per_img"], mask_size=c["mask_size"], size=c["crop"])
 
 
+def guide_dir(cfg: dict | DetTrainConfig, split: str) -> Path | None:
+    """Folder with the guide experiment's probability maps for ``split`` ('oof', 'test' or a folder name), or None."""
+    c = cfg if isinstance(cfg, dict) else asdict(cfg)
+    if not c.get("guide"):
+        return None
+    folder = c.get("guide_test_maps", "test") if split == "test" else split
+    return resolve_exp_dir(c["guide"]) / folder
+
+
 def validate(model, cfg: DetTrainConfig, infos, gt: GroundTruth, device, out_dir: Path | None = None) -> dict:
     """Full-image detections for the validation images -> PQ at a few score cut-offs (mask threshold, min_area fixed)."""
     per_thr: dict[float, list] = {t: [] for t in cfg.val_score_thresholds}
+    guides = guide_dir(cfg, "oof")
     pool = ThreadPoolExecutor(4)
 
     def score(stem, inst):
@@ -99,7 +113,7 @@ def validate(model, cfg: DetTrainConfig, infos, gt: GroundTruth, device, out_dir
 
     futures = []
     for stem in gt.stems:
-        x = normalize_with(read_image(infos[stem].path), infos[stem])
+        x = full_image_input(infos[stem], guides)
         futures.append(pool.submit(score, stem, predict_instances(model, x, device, amp_dtype(cfg.amp))))
     for fut in futures:
         for t, s in fut.result().items():
@@ -127,7 +141,7 @@ def run(cfg: DetTrainConfig, fold: int) -> dict:
     print(f"image stats for {len(infos)} images in {time.time() - t0:.0f}s")
 
     ds = InstanceCropDataset(ann, infos, train_stems, cfg.crop, cfg.samples_per_epoch, cfg.pos_fraction,
-                             build_augment(cfg.augment), cfg.min_instance_area)
+                             build_augment(cfg.augment), cfg.min_instance_area, guide_dir(cfg, "oof"))
     loader = DataLoader(ds, batch_size=cfg.batch_size, shuffle=True, num_workers=cfg.num_workers, pin_memory=True,
                         drop_last=True, persistent_workers=cfg.num_workers > 0, collate_fn=collate)
     gt = GroundTruth(ann, val_stems) if val_stems else None
