@@ -1,4 +1,4 @@
-"""Cached probability maps -> instances -> submission table, plus the saved post-processing settings."""
+"""Saved predictions -> instances -> submission table, plus the saved post-processing settings."""
 
 from __future__ import annotations
 
@@ -8,24 +8,29 @@ from pathlib import Path
 import pandas as pd
 
 from filament.data.submission import build_submission
-from filament.postprocess.components import PostConfig, instances, region_for
+from filament.postprocess.components import PostConfig, region_for
 from filament.postprocess.maps import load_prob
+from filament.postprocess.predictions import load_components, prediction_kind
 
 
-def probs_to_submission(prob_dir, stems, cfg: PostConfig, image_dir, rescorer=None) -> pd.DataFrame:
-    """Post-process cached probability maps of ``stems`` into a submission DataFrame.
+def predictions_to_submission(pred_dir, stems, cfg: PostConfig, image_dir, rescorer=None) -> pd.DataFrame:
+    """Post-process the saved predictions (probability maps or instances) of ``stems`` into a submission DataFrame.
 
     With a ``filament.postprocess.rescoring.Rescorer``, components must also pass its P(match) cut-off.
     """
     from filament.data.images import read_image
     from filament.postprocess.rescoring import component_table
 
+    if rescorer is not None and prediction_kind(pred_dir) != "maps":
+        raise NotImplementedError("the component classifier is only fitted on probability maps so far")
     preds, disks = {}, {}
     for stem in stems:
-        prob = load_prob(prob_dir, stem)
         if rescorer is None:
-            preds[stem] = instances(prob, cfg, region_for(stem, image_dir, cfg.disk_scale, disks))
+            comps = load_components(pred_dir, stem, cfg.threshold, region_for(stem, image_dir, cfg.disk_scale, disks),
+                                    cfg.link_px)
+            preds[stem] = [comps.labels == i for i in comps.keep(cfg.min_area, cfg.min_score)]
         else:
+            prob = load_prob(pred_dir, stem)
             comps, table = component_table(stem, prob, read_image(Path(image_dir) / f"{stem}.jpeg"), cfg)
             preds[stem] = [comps.labels == i for i in rescorer.keep_ids(table)]
     return build_submission(preds)

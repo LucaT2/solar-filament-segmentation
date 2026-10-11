@@ -145,7 +145,19 @@ def load_checkpoint_dataset(name):
 loaded = [load_checkpoint_dataset(n) for n in CHECKPOINT_DATASETS]
 for e in EXPERIMENTS:
     e["name"] = yaml.safe_load((REPO / e["config"]).read_text())["name"]
-    print(f"experiment {e['name']}: folds {e['folds']}, full-data seeds {e['full_seeds']}, overrides {e['overrides']}")
+    # configs/detection/... -> instance model (Mask R-CNN), configs/segmentation/... -> probability-map model
+    e["kind"] = "detection" if "/detection/" in e["config"] else "segmentation"
+    print(f"{e['kind']} experiment {e['name']}: folds {e['folds']}, full-data seeds {e['full_seeds']}, "
+          f"overrides {e['overrides']}")
+
+def kind_of(exp):
+    \"\"\"'detection' or 'segmentation' for an experiment folder in /kaggle/working.\"\"\"
+    cfg = WORK / exp / "config.yaml"
+    return yaml.safe_load(cfg.read_text()).get("kind", "segmentation") if cfg.exists() else "segmentation"
+
+if any(e["kind"] == "detection" for e in EXPERIMENTS):   # download the COCO weights once, before parallel jobs
+    from torchvision.models.detection import MaskRCNN_ResNet50_FPN_V2_Weights
+    MaskRCNN_ResNet50_FPN_V2_Weights.DEFAULT.get_state_dict(progress=False)
 """)
 
 md("""
@@ -162,21 +174,22 @@ for e in EXPERIMENTS:
     # two training processes share Kaggle's 4 CPU cores: 2 data-loading workers each unless overridden
     if n_gpu > 1 and not any(o.startswith("num_workers") for o in over):
         over.append("num_workers=2")
+    train = f"scripts/{e['kind']}/train.py"
     for k in e["folds"]:
-        jobs.append(["--config", e["config"], "--fold", str(k)] + (["--set", *over] if over else []))
+        jobs.append([train, "--config", e["config"], "--fold", str(k)] + (["--set", *over] if over else []))
     for s in e["full_seeds"]:
-        jobs.append(["--config", e["config"], "--fold", "-1", "--set", *over, f"seed={s}"])
+        jobs.append([train, "--config", e["config"], "--fold", "-1", "--set", *over, f"seed={s}"])
 
 procs = []
 for gpu in range(n_gpu):
     my_jobs = jobs[gpu::n_gpu]
     if not my_jobs:
         continue
-    script = " && ".join(subprocess.list2cmdline(["python", "-W", "ignore", "scripts/segmentation/train.py", *j]) for j in my_jobs)
+    script = " && ".join(subprocess.list2cmdline(["python", "-W", "ignore", *j]) for j in my_jobs)
     log = open(WORK / f"train_gpu{gpu}.log", "w")
     env = {**os.environ, "CUDA_VISIBLE_DEVICES": str(gpu), "PYTHONUNBUFFERED": "1"}
     procs.append((subprocess.Popen(["bash", "-c", script], env=env, stdout=log, stderr=subprocess.STDOUT), log, gpu))
-    print(f"GPU {gpu}: {[' '.join(j[1:4]) for j in my_jobs]}")
+    print(f"GPU {gpu}: {[' '.join(j[2:5]) for j in my_jobs]}")
 for p, log, gpu in procs:
     p.wait(); log.close()
     print(f"GPU {gpu} finished with exit code {p.returncode}")
@@ -199,6 +212,8 @@ md("""
 For every experiment with fold models trained here: predict their OOF maps with the same TTA as the test set, tune
 post-processing on them, fit the component classifier (honest nested estimate in `rescorer.json`), and compare with
 `BASELINE` on the same images (ΔPQ with a 95% bootstrap interval, without the classifier).
+Detection experiments already wrote their OOF instances during training; their tuning searches the mask threshold
+and the detection-score cut-off, and they have no component classifier (yet).
 """)
 code("""
 tta_flag = "--tta" if TTA else ""
@@ -209,16 +224,23 @@ for e in EXPERIMENTS:
     new_folds = " ".join(map(str, e["folds"]))          # trained in this session -> need OOF maps
     all_folds = " ".join(sorted(p.stem[4:] for p in (WORK / name).glob("fold*.pt")))  # incl. loaded ones
     print(f"\\n==================== {name}: new folds [{new_folds}], all folds [{all_folds}] ====================")
-    !python -W ignore scripts/segmentation/predict.py --exp {name} {tta_flag} --split oof --folds {new_folds}
-    !python -W ignore scripts/postprocess/tune_postprocess.py --exp {name} --workers 4 --fold {all_folds} \\
-        --thresholds 0.4 0.5 0.6 0.7 0.8 0.85 0.9 0.95 --min-areas 100 200 300 400 500 --min-scores 0
-    !python -W ignore scripts/postprocess/fit_rescorer.py --exp {name}
+    if e["kind"] == "segmentation":
+        !python -W ignore scripts/segmentation/predict.py --exp {name} {tta_flag} --split oof --folds {new_folds}
+        !python -W ignore scripts/postprocess/tune_postprocess.py --exp {name} --workers 4 --fold {all_folds} \\
+            --thresholds 0.4 0.5 0.6 0.7 0.8 0.85 0.9 0.95 --min-areas 100 200 300 400 500 --min-scores 0
+        !python -W ignore scripts/postprocess/fit_rescorer.py --exp {name}
+    else:   # thresholds = mask threshold, min-scores = detection-score cut-off
+        !python -W ignore scripts/postprocess/tune_postprocess.py --exp {name} --workers 4 --fold {all_folds} \\
+            --thresholds 0.3 0.4 0.5 0.6 0.7 --min-areas 0 100 200 300 400 \\
+            --min-scores 0.3 0.4 0.5 0.6 0.7 0.8 0.9
     if (WORK / BASELINE / "oof").is_dir():
         print("--- vs baseline, each with its own tuned post-processing:")
         !python -W ignore scripts/evaluation/compare.py --a {WORK / BASELINE} --b {WORK / name} --folds {all_folds}
-        print("--- vs baseline, both with the baseline's post-processing:")
-        !python -W ignore scripts/evaluation/compare.py --a {WORK / BASELINE} --b {WORK / name} --folds {all_folds} --post a
-    print(json.dumps(json.loads((WORK / name / "rescorer.json").read_text()), indent=2))
+        if e["kind"] == kind_of(BASELINE):   # settings only carry over between models of the same kind
+            print("--- vs baseline, both with the baseline's post-processing:")
+            !python -W ignore scripts/evaluation/compare.py --a {WORK / BASELINE} --b {WORK / name} --folds {all_folds} --post a
+    if (WORK / name / "rescorer.json").exists():
+        print(json.dumps(json.loads((WORK / name / "rescorer.json").read_text()), indent=2))
 """)
 
 md("""
@@ -234,7 +256,10 @@ test_stems = [p.stem for p in get_data_paths().test_images.glob("*.jpeg")]
 for sub_name, (exp, models) in SUBMISSIONS.items():
     print(f"\\n===== {sub_name}: {exp} {models} =====")
     model_args = " ".join(f'"{m}"' for m in models)
-    !python -W ignore scripts/segmentation/predict.py --exp {exp} {tta_flag} --models {model_args} --out test_{sub_name}
+    if kind_of(exp) == "segmentation":
+        !python -W ignore scripts/segmentation/predict.py --exp {exp} {tta_flag} --models {model_args} --out test_{sub_name}
+    else:
+        !python -W ignore scripts/detection/predict.py --exp {exp} --models {model_args} --out test_{sub_name}
     !python -W ignore scripts/postprocess/make_submission.py --exp {exp} --maps test_{sub_name} --out submission_{sub_name}.csv
     shutil.copy(WORK / exp / f"submission_{sub_name}.csv", WORK / f"submission_{sub_name}.csv")
     sub = read_submission(WORK / f"submission_{sub_name}.csv")
@@ -262,20 +287,20 @@ nbf.write(nbf.v4.new_notebook(cells=cells, metadata=META), REPO_ROOT / "notebook
 # Second notebook for a parallel session (Kaggle allows 2 GPU sessions at once): same code, different experiments.
 SCREEN_CONFIG = '''
 # ---- configuration ---------------------------------------------------------------------------------------
-# Fold-0 re-runs of the two failed screens, compared against ConvNeXt-Tiny + U-Net: MiT-B2 + U-Net (out of memory
-# in full-image validation -> now tiled at 1024 px) and ConvNeXt-T + MAnet (fp16 overflow -> decoder in float32).
+# Step 4, fold-0 screen of the first instance model, compared against ConvNeXt-Tiny + U-Net (one per GPU):
+# Mask R-CNN ResNet50-FPN v2 with the default 28 x 28 mask head, and with a finer 56 x 56 mask head.
 EXPERIMENTS = [
-    {"config": "configs/segmentation/unet_mitb2_skel050.yaml",       "folds": [0], "full_seeds": [], "overrides": []},
-    {"config": "configs/segmentation/archive/manet_convnext_t_skel050.yaml", "folds": [0], "full_seeds": [], "overrides": []},
+    {"config": "configs/detection/maskrcnn_r50_v2.yaml",     "folds": [0], "full_seeds": [], "overrides": []},
+    {"config": "configs/detection/maskrcnn_r50_v2_m56.yaml", "folds": [0], "full_seeds": [], "overrides": []},
 ]
 # attached inputs, matched by "<notebook>/<experiment>" in their path: this notebook's previous output
 # (Add Input -> Your Work -> Notebooks -> this notebook), which holds ConvNeXt-Tiny + U-Net fold 0 and its OOF maps
 CHECKPOINT_DATASETS = ["solar-filament-v2/unet_convnext_t_skel050"]
-BASELINE = "unet_convnext_t_skel050"   # same encoder with the U-Net decoder
-TTA = True                             # average 4 flips per model when predicting
+BASELINE = "unet_convnext_t_skel050"   # best single fold-0 model
+TTA = True                             # U-Net only: average 4 flips per model when predicting
 SUBMISSIONS = {                        # output name -> (experiment, [model names / glob patterns])
-    "unet_mitb2_fold0": ("unet_mitb2_skel050", ["fold0"]),
-    "manet_convnext_t_fold0": ("manet_convnext_t_skel050", ["fold0"]),
+    "maskrcnn_r50_v2_fold0": ("maskrcnn_r50_v2", ["fold0"]),
+    "maskrcnn_r50_v2_m56_fold0": ("maskrcnn_r50_v2_m56", ["fold0"]),
 }
 GITHUB_SECRET = "Github_key"           # label of the Kaggle secret holding the GitHub token
 WANDB_SECRET = "WANDB_API_KEY"         # label of the (optional) Kaggle secret holding the W&B API key

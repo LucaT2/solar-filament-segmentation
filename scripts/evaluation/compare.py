@@ -1,6 +1,6 @@
 """Paired comparison of two experiments on the same out-of-fold images: ΔPQ with a bootstrap confidence interval.
 
-Both experiments are post-processed (threshold, size filter; no classifier) and scored with the exact PQ on the
+Both experiments (probability maps or instances) are post-processed (threshold, size filter; no classifier) and scored with the exact PQ on the
 images they have in common. Resampling *images* (with all their annotator-images) 2,000 times gives the uncertainty
 of the difference. Because both are scored on the same images, image-to-image difficulty cancels out and the interval
 is much tighter than comparing two separate scores.
@@ -26,9 +26,9 @@ from filament.data.annotations import annotation_table, load_coco
 from filament.data.folds import load_folds
 from filament.evaluation.scoring import GroundTruth, score_components
 from filament.paths import REPO_ROOT, get_data_paths
-from filament.postprocess.components import find_components, region_for
-from filament.postprocess.maps import load_prob
+from filament.postprocess.components import region_for
 from filament.postprocess.pipeline import load_postprocess
+from filament.postprocess.predictions import available_stems, load_components
 
 
 def resolve(exp: str) -> Path:
@@ -42,7 +42,7 @@ def per_image_totals(exp_dir: Path, stems, gt: GroundTruth, cfg, image_dir) -> p
     """Per image stem: summed TP IoU, TP, FP, FN over its annotator-images (everything PQ needs)."""
     rows, disks = [], {}
     for stem in stems:
-        comps = find_components(load_prob(exp_dir / "oof", stem), cfg.threshold,
+        comps = load_components(exp_dir / "oof", stem, cfg.threshold,
                                 region_for(stem, image_dir, cfg.disk_scale, disks), cfg.link_px)
         scores = score_components(stem, comps, comps.keep(cfg.min_area, cfg.min_score), gt)
         rows.append({"stem": stem, "iou_sum": sum(float(s.tp_ious.sum()) for s in scores),
@@ -75,7 +75,7 @@ def main() -> None:
     folds = load_folds()
     if args.folds:
         folds = folds[folds.fold.isin(args.folds)]
-    common = {p.stem for p in (dir_a / "oof").glob("*.png")} & {p.stem for p in (dir_b / "oof").glob("*.png")}
+    common = available_stems(dir_a / "oof") & available_stems(dir_b / "oof")
     stems = [s for s in folds.stem if s in common]
     if not stems:
         raise SystemExit("no common OOF images between the two experiments")

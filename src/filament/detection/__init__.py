@@ -1,12 +1,12 @@
-"""Instance models (planned: Mask R-CNN): each produces scored instance masks directly.
+"""Instance models (Mask R-CNN): each predicts scored instance masks directly.
 
-Planned modules:
+* ``instances``  per-image detections (boxes, scores, small soft masks) saved as ``<stem>.npz``; pasting into the
+                 image and overlap resolution -> ``Components``, the same structure the probability maps produce
+* ``dataset``    training crops with one annotator's filaments as instances (same sampling/augmentation as U-Net)
+* ``model``      torchvision Mask R-CNN ResNet50-FPN v2 for 1-channel images at native resolution; raw inference
+* ``train``      training loop with fold validation (``DetTrainConfig``, configs in ``configs/detection/``)
 
-* ``dataset``  instance targets (boxes + masks of one annotator) on training crops
-* ``model``    torchvision Mask R-CNN (ResNet50-FPN v2, COCO weights), set up for 1-channel 2048 px images
-* ``train``    training loop with fold validation (configs in ``configs/detection/``)
-* ``predict``  full-image inference -> instance masks + scores -> submission rows
-
-Shared pieces it reuses: ``filament.data`` (annotations, images, RLE, folds, submissions) and
-``filament.evaluation`` (PQ). Detections can also be combined with the U-Net components as a classifier feature.
+Because saved instances load through ``filament.postprocess.predictions`` like probability maps, tuning
+(``scripts/postprocess/tune_postprocess.py``), comparison (``scripts/evaluation/compare.py``) and submissions
+(``scripts/postprocess/make_submission.py``) work for detection experiments unchanged.
 """

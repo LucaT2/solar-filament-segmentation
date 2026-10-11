@@ -1,4 +1,5 @@
-"""Turn an experiment's probability maps into a submission CSV, using its tuned post-processing.
+"""Turn an experiment's saved predictions (probability maps or instances) into a submission CSV, using its tuned
+post-processing.
 
 Usage:
     python scripts/postprocess/make_submission.py --exp classical                 # test maps -> outputs/classical/submission.csv
@@ -11,7 +12,8 @@ import argparse
 
 from filament.data.submission import validate_submission, write_submission
 from filament.paths import get_data_paths, get_output_dir, resolve_exp_dir
-from filament.postprocess.pipeline import load_postprocess, probs_to_submission
+from filament.postprocess.pipeline import load_postprocess, predictions_to_submission
+from filament.postprocess.predictions import available_stems
 from filament.postprocess.rescoring import Rescorer
 
 
@@ -21,7 +23,7 @@ def main() -> None:
     parser.add_argument("--split", choices=["test", "oof"], default="test")
     parser.add_argument("--no-rescore", action="store_true", help="ignore outputs/<exp>/rescorer.pkl if present")
     parser.add_argument("--out", help="output file name (default: submission.csv / oof_submission.csv)")
-    parser.add_argument("--maps", help="sub-folder of outputs/<exp>/ with the probability maps (default: the split)")
+    parser.add_argument("--maps", help="sub-folder of outputs/<exp>/ with the predictions (default: the split)")
     args = parser.parse_args()
 
     paths = get_data_paths()
@@ -39,12 +41,12 @@ def main() -> None:
     stems = sorted(p.stem for p in image_dir.glob("*.jpeg"))
     maps = exp_dir / (args.maps or args.split)
     if args.split == "oof":  # OOF maps may exist for only some folds so far
-        available = {p.stem for p in maps.glob("*.png")}
+        available = available_stems(maps)
         if len(available) < len(stems):
             print(f"note: OOF maps for {len(available)} of {len(stems)} training images; writing those only")
         stems = [s for s in stems if s in available]
 
-    sub = probs_to_submission(maps, stems, cfg, image_dir, rescorer)
+    sub = predictions_to_submission(maps, stems, cfg, image_dir, rescorer)
     problems = validate_submission(sub, expected_stems=stems)
     name = args.out or ("submission.csv" if args.split == "test" else "oof_submission.csv")
     path = write_submission(sub, exp_dir / name)
