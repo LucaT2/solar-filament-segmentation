@@ -235,7 +235,7 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 | 2026-10-11 | ConvNeXt-T + MAnet / MiT-B2 + U-Net / SegFormer | – | – | failed (NaN / out of memory); fixed and re-queued (MAnet, MiT-B2 + U-Net) |
 | 2026-10-11 | local: ensemble ResNet34 skel050 + ConvNeXt-T (fold-0 maps, 4 flips) | 0.424 (f0); nested 0.445 | – | vs ConvNeXt +0.002 [−0.007, +0.011] |
 | 2026-10-11 | local: 8-way TTA, ConvNeXt-T / ResNet34 skel050 | 0.426 / 0.415 (f0); nested 0.446 / 0.441 | – | +0.004 / +0.003 vs 4 flips |
-| 2026-10-11 | local: ensemble of both with 8-way TTA, thr 0.8 | 0.424 (f0); nested **0.449** | – | best fold-0 result so far |
+| 2026-10-11 | local: ensemble of both with 8-way TTA, thr 0.8 | 0.424 (f0); nested **0.449** | ? | best fold-0 result so far; `outputs/submission_ens_d8_r34_convnext_fold0.csv` (fold-0 models only; test maps as wide as OOF maps; classifier keeps 75.7% on test vs 74.8% OOF) |
 
 *Full-data models: no measurable gain on the public LB (all three at 0.37). Decision for the final recipe: optional; add 1–2 only if GPU time is left over at the end.*
 
