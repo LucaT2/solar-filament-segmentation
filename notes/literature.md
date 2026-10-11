@@ -70,6 +70,20 @@ Short summaries of prior work and what each implies for this competition. Each e
 - *Implication:* validation splits must avoid temporal leakage, and the choice of input normalization matters for
   small models.
 
+**Hu et al. 2026, "A Modern ConvNet for Solar Filament Detection", RAA (accepted)** ([arXiv 2607.24525](https://arxiv.org/abs/2607.24525))
+- MORDEN (Multiscale ORiented DENdritic), a semantic segmentation ConvNet built for multiscale features. It is trained
+  on a small hand-annotated Hα set (MHAS) and then used to generate a large set (AHAS).
+- Post-processing: **DenseCRF** sharpens mask edges; **DBSCAN** groups pixels into filament instances. The paper reports
+  that MORDEN beats the open-access filament models it was compared against.
+- *Implication:* the newest filament work still does semantic segmentation followed by instance post-processing, like
+  our pipeline. DenseCRF is a cheap post-processing step we could test; DBSCAN could merge nearby pieces of one
+  filament, the job we tested with `link_px`.
+
+**"Chirality classification of solar filaments on MAGFiLO", 2025** ([arXiv 2509.18214](https://arxiv.org/abs/2509.18214))
+- ConvNeXt-Base classifies filament crops by chirality; per-class accuracy about 0.69 / 0.73.
+- *Implication:* not segmentation, but it shows ConvNeXt features transfer well to MAGFiLO crops (consistent with our
+  ConvNeXt-T encoder being our best).
+
 ## Thin-structure and connectivity methods (vessels, roads, cracks)
 
 **clDice: Shit et al., CVPR 2021** ([paper](https://openaccess.thecvf.com/content/CVPR2021/html/Shit_clDice_-_A_Novel_Topology-Preserving_Loss_Function_for_Tubular_Structure_CVPR_2021_paper.html))
@@ -80,6 +94,12 @@ Short summaries of prior work and what each implies for this competition. Each e
   on 5 datasets for about +8% training time.
 - *Implication:* the cheapest way to fight **fragmentation** (filaments broken at thin necks), our main PQ risk. A
   first-choice addition to BCE+Dice in Stage 5.
+
+**DenseCRF: Krähenbühl & Koltun, NeurIPS 2011** ([paper](https://arxiv.org/abs/1210.5644)); used as post-processing in DeepLab v1/v2
+- A fully connected conditional random field refines a probability map: pixels that are close together *and* similar
+  in intensity are pushed to the same label, so mask edges snap to image edges. Mean-field inference makes it fast.
+- *Implication:* a training-free step between the probability map and the threshold. It can help when masks are
+  blurry at their edges; it can also erase thin, faint parts. Must be tested with paired CV before use.
 
 ## Instance segmentation scored with Panoptic Quality
 
