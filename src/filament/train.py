@@ -57,6 +57,8 @@ class TrainConfig:
     skel_weight: float = 0.0  # Skeleton Recall loss weight (0 = off)
     skel_radius: int = 2  # thickness of the tubed skeleton (diamond dilation radius, px)
     target_mode: str = "random"  # random: one annotator's mask per sample | consensus: average of all annotators
+    decoder_fp32: bool = False  # run the decoder in float32 under mixed precision (fp16 overflow, e.g. MAnet)
+    grad_clip: float = 0.0  # max gradient norm (0 = off)
     infer_tile: int | None = None  # full-image prediction in tiles of this size (None = one pass)
     infer_overlap: int = 128
     amp: str = "fp16"  # fp16 | bf16 | none
@@ -152,7 +154,7 @@ def run(cfg: TrainConfig, fold: int) -> dict:
                         pin_memory=True, drop_last=True, persistent_workers=cfg.num_workers > 0)
     gt = GroundTruth(ann, val_stems) if val_stems else None
 
-    model = build_model(cfg.arch, cfg.encoder, cfg.pretrained).to(device)
+    model = build_model(cfg.arch, cfg.encoder, cfg.pretrained, decoder_fp32=cfg.decoder_fp32).to(device)
     encoder_ids = {id(p) for p in model.encoder.parameters()}
     param_groups = [
         {"params": [p for p in model.parameters() if id(p) in encoder_ids], "lr": cfg.lr * cfg.encoder_lr_mult},
@@ -180,22 +182,37 @@ def run(cfg: TrainConfig, fold: int) -> dict:
     )
     best, log = -1.0, []
     for epoch in range(1, cfg.epochs + 1):
-        t0, losses = time.time(), []
+        t0, losses, skipped = time.time(), [], 0
         for x, y in loader:
             x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
             with torch.autocast(device.type, dtype=dtype, enabled=dtype is not None and device.type == "cuda"):
                 loss = loss_fn(model(x), y)
             opt.zero_grad(set_to_none=True)
+            if not torch.isfinite(loss):  # e.g. fp16 overflow: skip the batch instead of corrupting training
+                skipped += 1
+                sched.step()
+                continue
             scaler.scale(loss).backward()
+            if cfg.grad_clip > 0:
+                scaler.unscale_(opt)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip)
             scaler.step(opt)
             scaler.update()
             sched.step()
             losses.append(loss.item())
         lrs = sched.get_last_lr()  # [encoder, decoder]
-        row = {"epoch": epoch, "loss": float(np.mean(losses)), "lr": lrs[-1], "lr_encoder": lrs[0],
-               "train_s": time.time() - t0}
+        row = {"epoch": epoch, "loss": float(np.mean(losses)) if losses else float("nan"), "lr": lrs[-1],
+               "lr_encoder": lrs[0], "train_s": time.time() - t0, "skipped_batches": skipped}
+        if skipped > 0.5 * len(loader):  # training has diverged: stop instead of wasting the remaining GPU time
+            log.append(row)
+            pd.DataFrame(log).to_csv(out / f"log_{tag}.csv", index=False)
+            tracker.finish()
+            raise RuntimeError(f"{cfg.name} {tag}: {skipped}/{len(loader)} batches with non-finite loss in epoch "
+                               f"{epoch}; training diverged (try decoder_fp32, grad_clip or a lower lr)")
 
         if gt is not None and (epoch % cfg.val_every == 0 or epoch == cfg.epochs):
+            if device.type == "cuda":  # hand training's cached-but-unused memory back before full-image validation
+                torch.cuda.empty_cache()
             t1 = time.time()
             pqs = validate(model, cfg, infos, gt, device)
             row.update({f"pq@{t}": v for t, v in pqs.items()}, val_s=time.time() - t1)

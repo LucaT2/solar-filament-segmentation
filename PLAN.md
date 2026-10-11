@@ -126,6 +126,13 @@ Cut-off for new architectures: ~Oct 29; then final ensemble, report, repo, form 
       P = 0.92, better outlines (SQ +0.005), −119 FP; with classifier 0.439 vs 0.435. EfficientNet-B4 ΔPQ −0.007
       [−0.021, +0.006]; with classifier 0.419. (Note: both also use batch 16 / lr 7e-4.) Decision (user, 2026-10-10):
       **no 5-fold runs for now**; keep screening architectures on fold 0 (ConvNeXt-T + U-Net is the fold-0 reference).
+- [x] **Decoder / transformer screen (2026-10-11, fold 0 vs ConvNeXt-T + U-Net):** **UPerNet** ΔPQ −0.015
+      [−0.024, −0.006] (outlines worse, SQ −0.0125: its 1/4-resolution output blurs 8 px filaments) → U-Net stays.
+      **MAnet** diverged (fp16 overflow → NaN from epoch 6): no valid result. **MiT-B2 / SegFormer** crashed with out of
+      memory in the first full-image validation (4 GiB attention block on top of training's cached memory).
+      Fixes: `decoder_fp32` (MAnet), 1024 px tiled validation/prediction (MiT), `empty_cache()` before validation,
+      expandable CUDA segments, non-finite batches skipped and runs aborted once an epoch is mostly non-finite.
+      Re-run of MiT-B2 + U-Net and MAnet (fp32 decoder) in `kaggle_screen.ipynb`; SegFormer dropped (1/4-res head).
 - [ ] **Step 3c — transformer encoder (prepared):** MiT-B2 (SegFormer's encoder) + U-Net (`unet_mitb2_skel050`) and
       the original SegFormer head (`segformer_mitb2_skel050`); encoder lr ×0.1, weight decay 0.01 (SegFormer
       fine-tuning defaults). Full 2048² inference needs 6.7 GiB (fine on a T4; tiled locally). In the main notebook,
@@ -217,6 +224,9 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 
 | 2026-10-10 | fold-0 screen: ConvNeXt-Tiny encoder (`unet_convnext_t_skel050`), batch 16 | **0.422 (f0)**; nested **0.439** | ? | vs skel050 (r34): ΔPQ +0.008 [−0.004, +0.018], P 0.92; SQ 0.679 |
 | 2026-10-10 | fold-0 screen: EfficientNet-B4 encoder (`unet_effb4_skel050`), batch 16 | 0.408 (f0); nested 0.419 | ? | vs skel050: ΔPQ −0.007 [−0.021, +0.006] |
+
+| 2026-10-11 | fold-0 screen: ConvNeXt-T + **UPerNet** (`upernet_convnext_t_skel050`), thr 0.8 | 0.407 (f0); nested 0.431 | ? | vs ConvNeXt-T + U-Net: ΔPQ −0.015 [−0.024, −0.006]; SQ −0.0125 |
+| 2026-10-11 | ConvNeXt-T + MAnet / MiT-B2 + U-Net / SegFormer | – | – | failed (NaN / out of memory); fixed and re-queued (MAnet, MiT-B2 + U-Net) |
 
 *Full-data models: no measurable gain on the public LB (all three at 0.37). Decision for the final recipe: optional; add 1–2 only if GPU time is left over at the end.*
 

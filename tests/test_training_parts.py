@@ -79,6 +79,22 @@ def test_sampling_weights_follow_annotator_count(ann, ai):
     assert weights[2] == pytest.approx(2 * weights[1]) and weights[3] == pytest.approx(3 * weights[1])
 
 
+def test_decoder_fp32_runs_decoder_in_float32_under_autocast():
+    from filament.model import build_model
+
+    seen = {}
+    model = build_model("Unet", "resnet34", pretrained=False, decoder_fp32=True)
+    model.segmentation_head.register_forward_hook(lambda m, i, o: seen.setdefault("dtype", i[0].dtype))
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        model(torch.randn(1, 1, 64, 64))
+    assert seen["dtype"] == torch.float32  # decoder output stayed float32 although autocast was on
+    plain = build_model("Unet", "resnet34", pretrained=False)
+    plain.segmentation_head.register_forward_hook(lambda m, i, o: seen.__setitem__("plain", i[0].dtype))
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        plain(torch.randn(1, 1, 64, 64))
+    assert seen["plain"] == torch.bfloat16
+
+
 class _Pointwise(nn.Module):
     """A 'network' with no spatial context: tiled and full-image predictions must agree exactly."""
 

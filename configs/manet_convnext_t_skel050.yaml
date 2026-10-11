@@ -20,6 +20,7 @@ skel_weight: 0.5
 skel_radius: 1
 target_mode: random
 amp: fp16
+decoder_fp32: true      # MAnet's attention overflowed fp16 (NaN from epoch 6); decoder in float32
 num_workers: 4
 val_every: 2
 val_thresholds: [0.6, 0.7, 0.8, 0.9]

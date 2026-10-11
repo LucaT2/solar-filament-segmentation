@@ -9,14 +9,46 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def build_model(arch: str = "Unet", encoder: str = "resnet34", pretrained: bool = True) -> nn.Module:
+def _to_float(obj):
+    if torch.is_tensor(obj):
+        return obj.float()
+    if isinstance(obj, (list, tuple)):
+        return type(obj)(_to_float(o) for o in obj)
+    return obj
+
+
+def _fp32_forward(forward):
+    """Run a module outside autocast in float32 (e.g. a decoder whose attention overflows in fp16)."""
+
+    def wrapped(*args, **kwargs):
+        device_type = next((a.device.type for a in _flatten(args) if torch.is_tensor(a)), "cuda")
+        with torch.autocast(device_type, enabled=False):
+            return forward(*_to_float(args), **{k: _to_float(v) for k, v in kwargs.items()})
+
+    return wrapped
+
+
+def _flatten(obj):
+    if isinstance(obj, (list, tuple)):
+        for o in obj:
+            yield from _flatten(o)
+    else:
+        yield obj
+
+
+def build_model(arch: str = "Unet", encoder: str = "resnet34", pretrained: bool = True,
+                decoder_fp32: bool = False) -> nn.Module:
     """Single-channel input (grayscale Hα), single-channel output (filament logit).
 
-    smp adapts the pretrained RGB stem to 1 input channel by summing its weights.
+    smp adapts the pretrained RGB stem to 1 input channel by summing its weights. ``decoder_fp32`` keeps the decoder
+    in float32 under mixed precision (the encoder still runs in fp16), for decoders whose activations overflow fp16.
     """
-    return smp.create_model(
+    model = smp.create_model(
         arch, encoder_name=encoder, encoder_weights="imagenet" if pretrained else None, in_channels=1, classes=1
     )
+    if decoder_fp32:
+        model.decoder.forward = _fp32_forward(model.decoder.forward)
+    return model
 
 
 class BCEDiceLoss(nn.Module):

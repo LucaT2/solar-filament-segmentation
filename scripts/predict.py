@@ -47,7 +47,7 @@ def load_models(ckpts, device):
     for path in ckpts:
         state = torch.load(path, map_location=device)
         cfg = state["config"]
-        model = build_model(cfg["arch"], cfg["encoder"], pretrained=False)
+        model = build_model(cfg["arch"], cfg["encoder"], pretrained=False, decoder_fp32=cfg.get("decoder_fp32", False))
         model.load_state_dict(state["model"])
         models.append(model.to(device).eval())
         print(f"loaded {path.name} (epoch {state.get('epoch')}, val PQ {state.get('val_pq', float('nan')):.4f})")

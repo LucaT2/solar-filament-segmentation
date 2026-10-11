@@ -20,6 +20,8 @@ skel_weight: 0.5
 skel_radius: 1
 target_mode: random
 amp: fp16
+infer_tile: 1024        # full 2048 images need a 4 GiB attention block: predict in tiles instead
+infer_overlap: 128
 num_workers: 4
 val_every: 2
 val_thresholds: [0.6, 0.7, 0.8, 0.9]
