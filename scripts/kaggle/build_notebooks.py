@@ -1,0 +1,292 @@
+"""Build the two Kaggle notebooks from one source, so their code cells never drift apart.
+
+* notebooks/kaggle/kaggle_train_submit.ipynb  main session (multi-fold runs, submissions)
+* notebooks/kaggle/kaggle_screen.ipynb        parallel session (fold-0 screens)
+
+They differ only in the title and the configuration cell (EXPERIMENTS, inputs, baseline, submissions): edit those
+here, re-run, commit, push, then re-import the notebook on Kaggle.
+
+Usage:
+    python scripts/kaggle/build_notebooks.py
+"""
+from pathlib import Path
+
+import nbformat as nbf
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+cells = []
+md = lambda s: cells.append(nbf.v4.new_markdown_cell(s.strip()))
+code = lambda s: cells.append(nbf.v4.new_code_cell(s.strip()))
+
+md("""
+# Solar Filament Segmentation: experiments on Kaggle
+
+Runs one or more **experiments** (a config + the folds / full-data models to train) on Kaggle GPUs, then for each:
+out-of-fold maps → tuned post-processing → component classifier → **paired comparison against the baseline** →
+optional submissions. All logic lives in the repository
+([LucaT2/solar-filament-segmentation](https://github.com/LucaT2/solar-filament-segmentation)); this notebook only
+orchestrates it.
+
+### Settings (*Notebook options* in the right-hand panel)
+* Accelerator: **GPU T4 ×2**. Internet: **on**.
+* *Add Input*: competition **filament-segmentation-2026**, plus the datasets listed in `CHECKPOINT_DATASETS` (earlier
+  results, e.g. the baseline **solar-filament-unet-r34**, created with `scripts/kaggle/prepare_kaggle_dataset.py`).
+* *Add-ons → Secrets*: the GitHub token (label `GITHUB_SECRET`) and, optionally, the W&B key (`WANDB_SECRET`). Tick both.
+* Run with **Save Version → Save & Run All** so it keeps running in the background.
+""")
+
+code("""
+# ---- configuration ---------------------------------------------------------------------------------------
+# Each experiment: a config from the repo, the folds to train (cross-validation, with validation) and/or seeds of
+# full-data models (all 707 images, no validation). Jobs of all experiments are spread over the GPUs.
+EXPERIMENTS = [   # fold-0 screen of the transformer encoder MiT-B2, one per GPU
+    {"config": "configs/segmentation/unet_mitb2_skel050.yaml",      "folds": [0], "full_seeds": [], "overrides": []},  # + U-Net
+    {"config": "configs/segmentation/archive/segformer_mitb2_skel050.yaml", "folds": [0], "full_seeds": [], "overrides": []},  # SegFormer
+]
+# attached inputs with earlier experiment results, matched by "<notebook>/<experiment>" in their path
+# (Add Input -> Your Work -> Notebooks): the screen notebook's output, holding ConvNeXt-Tiny + U-Net fold 0
+CHECKPOINT_DATASETS = ["solar-filament-v2/unet_convnext_t_skel050"]
+BASELINE = "unet_convnext_t_skel050"   # current best fold-0 model
+TTA = True                             # average 4 flips per model when predicting
+SUBMISSIONS = {                        # output name -> (experiment, [model names / glob patterns])
+    "unet_mitb2_fold0": ("unet_mitb2_skel050", ["fold0"]),
+    "segformer_mitb2_fold0": ("segformer_mitb2_skel050", ["fold0"]),
+}
+GITHUB_SECRET = "Github_key"           # label of the Kaggle secret holding the GitHub token
+WANDB_SECRET = "WANDB_API_KEY"         # label of the (optional) Kaggle secret holding the W&B API key
+REPO_URL = "github.com/LucaT2/solar-filament-segmentation.git"
+REPO_BRANCH = "main"
+REPO_DATASET = None                    # alternative to the GitHub token: name of a dataset containing the repo
+""")
+
+md("## 1. Setup")
+code("""
+import os, sys, shutil, subprocess, glob, json
+from pathlib import Path
+
+from kaggle_secrets import UserSecretsClient
+secrets = UserSecretsClient()
+# less GPU-memory fragmentation between training and full-image validation (inherited by all subprocesses)
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+try:   # optional W&B tracking; training subprocesses inherit the environment variable
+    os.environ["WANDB_API_KEY"] = secrets.get_secret(WANDB_SECRET)
+    print("W&B tracking enabled")
+except Exception:
+    os.environ["WANDB_MODE"] = "disabled"
+    print(f"no '{WANDB_SECRET}' secret: tracking disabled")
+
+def github_token():
+    try:
+        return secrets.get_secret(GITHUB_SECRET)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Kaggle secret '{GITHUB_SECRET}' is not attached to this notebook. In the editor: Add-ons -> Secrets -> "
+            f"make sure a secret with exactly this label exists and its checkbox is ticked, or change GITHUB_SECRET "
+            f"in the configuration cell. Then Save Version -> Save & Run All again."
+        ) from exc
+
+def find_input(name, marker):
+    \"\"\"Locate an attached dataset by name (Kaggle's mount layout varies), via a file it must contain.\"\"\"
+    hits = [Path(p).parent for p in glob.glob(f"/kaggle/input/**/{marker}", recursive=True) if name in p]
+    if not hits:
+        raise FileNotFoundError(f"attached dataset '{name}' with {marker} not found under /kaggle/input")
+    return min(hits, key=lambda p: len(str(p)))
+
+REPO = Path("/kaggle/working/repo")
+if REPO_DATASET:
+    shutil.copytree(find_input(REPO_DATASET, "pyproject.toml"), REPO, dirs_exist_ok=True)
+elif not REPO.exists():
+    token = github_token()
+    # token as the password (required for fine-grained tokens; also works for classic ones)
+    res = subprocess.run(["git", "clone", "--depth", "1", "-b", REPO_BRANCH,
+                          f"https://x-access-token:{token}@{REPO_URL}", str(REPO)], capture_output=True, text=True)
+    if res.returncode != 0:   # token never printed
+        raise RuntimeError(
+            "git clone failed: " + res.stderr.replace(token, "***") +
+            "\\nCheck the GitHub token: not expired; 'Repository access' includes solar-filament-segmentation; "
+            "'Repository permissions -> Contents: Read-only'.")
+print(subprocess.run(["git", "-C", str(REPO), "log", "--oneline", "-1"], capture_output=True, text=True).stdout)
+""")
+code("""
+# Kaggle images ship torch, numpy, pandas, opencv, scikit-image, scikit-learn, timm and wandb. Install only what is
+# missing, pinned to the versions tested locally (requirements.txt), without touching the preinstalled stack.
+!pip install -q --no-deps segmentation-models-pytorch==0.5.0 albumentations==2.0.8 albucore==0.0.24 pycocotools
+!pip install -q --no-deps -e {REPO}
+sys.path.insert(0, str(REPO / "src"))
+os.chdir(REPO)
+
+import torch, yaml
+print("torch", torch.__version__, "| GPUs:", [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())])
+!python scripts/setup/check_env.py
+""")
+code("""
+WORK = Path("/kaggle/working")
+
+def load_checkpoint_dataset(name):
+    \"\"\"Copy an attached experiment dataset into /kaggle/working/<experiment name>, unpacking zipped folders.\"\"\"
+    src = find_input(name, "postprocess.json")
+    exp = yaml.safe_load((src / "config.yaml").read_text())["name"] if (src / "config.yaml").exists() else name
+    dst = WORK / exp
+    shutil.copytree(src, dst, dirs_exist_ok=True)
+    # `kaggle datasets create --dir-mode zip` uploads sub-folders as zips; Kaggle may or may not extract them
+    for archive in dst.glob("*.zip"):
+        if not (dst / archive.stem).is_dir():
+            shutil.unpack_archive(archive, dst / archive.stem)
+        archive.unlink()
+    nested = dst / "oof" / "oof"   # some zips contain the folder itself
+    if nested.is_dir():
+        for f in nested.iterdir():
+            f.rename(dst / "oof" / f.name)
+        nested.rmdir()
+    print(f"{name} -> {dst}: {sorted(p.name for p in dst.glob('*.pt'))} | OOF maps: {len(list((dst / 'oof').glob('*.png')))}")
+    return exp
+
+loaded = [load_checkpoint_dataset(n) for n in CHECKPOINT_DATASETS]
+for e in EXPERIMENTS:
+    e["name"] = yaml.safe_load((REPO / e["config"]).read_text())["name"]
+    print(f"experiment {e['name']}: folds {e['folds']}, full-data seeds {e['full_seeds']}, overrides {e['overrides']}")
+""")
+
+md("""
+## 2. Train
+
+All jobs (every fold and full-data model of every experiment) are dealt out to the GPUs in turn; each GPU works
+through its list in one background process. Logs: `/kaggle/working/train_gpu<k>.log`.
+""")
+code("""
+n_gpu = max(torch.cuda.device_count(), 1)
+jobs = []
+for e in EXPERIMENTS:
+    over = list(e["overrides"])
+    # two training processes share Kaggle's 4 CPU cores: 2 data-loading workers each unless overridden
+    if n_gpu > 1 and not any(o.startswith("num_workers") for o in over):
+        over.append("num_workers=2")
+    for k in e["folds"]:
+        jobs.append(["--config", e["config"], "--fold", str(k)] + (["--set", *over] if over else []))
+    for s in e["full_seeds"]:
+        jobs.append(["--config", e["config"], "--fold", "-1", "--set", *over, f"seed={s}"])
+
+procs = []
+for gpu in range(n_gpu):
+    my_jobs = jobs[gpu::n_gpu]
+    if not my_jobs:
+        continue
+    script = " && ".join(subprocess.list2cmdline(["python", "-W", "ignore", "scripts/segmentation/train.py", *j]) for j in my_jobs)
+    log = open(WORK / f"train_gpu{gpu}.log", "w")
+    env = {**os.environ, "CUDA_VISIBLE_DEVICES": str(gpu), "PYTHONUNBUFFERED": "1"}
+    procs.append((subprocess.Popen(["bash", "-c", script], env=env, stdout=log, stderr=subprocess.STDOUT), log, gpu))
+    print(f"GPU {gpu}: {[' '.join(j[1:4]) for j in my_jobs]}")
+for p, log, gpu in procs:
+    p.wait(); log.close()
+    print(f"GPU {gpu} finished with exit code {p.returncode}")
+    print("".join(open(WORK / f"train_gpu{gpu}.log").readlines()[-4:]))
+""")
+code("""
+# Training curves (fold models: validation PQ per threshold; full-data models: loss only)
+import pandas as pd
+for e in EXPERIMENTS:
+    for f in sorted((WORK / e["name"]).glob("log_*.csv")):
+        log = pd.read_csv(f)
+        pq_cols = [c for c in log.columns if c.startswith("pq@")]
+        best = f"best val PQ {log[pq_cols].max(axis=1).max():.4f}" if pq_cols else "no validation"
+        print(f"{e['name']}/{f.stem}: {len(log)} epochs, {best}, last loss {log.loss.iloc[-1]:.4f}")
+""")
+
+md("""
+## 3. Out-of-fold maps, post-processing, classifier, and comparison with the baseline
+
+For every experiment with fold models trained here: predict their OOF maps with the same TTA as the test set, tune
+post-processing on them, fit the component classifier (honest nested estimate in `rescorer.json`), and compare with
+`BASELINE` on the same images (ΔPQ with a 95% bootstrap interval, without the classifier).
+""")
+code("""
+tta_flag = "--tta" if TTA else ""
+for e in EXPERIMENTS:
+    if not e["folds"]:
+        continue
+    name = e["name"]
+    new_folds = " ".join(map(str, e["folds"]))          # trained in this session -> need OOF maps
+    all_folds = " ".join(sorted(p.stem[4:] for p in (WORK / name).glob("fold*.pt")))  # incl. loaded ones
+    print(f"\\n==================== {name}: new folds [{new_folds}], all folds [{all_folds}] ====================")
+    !python -W ignore scripts/segmentation/predict.py --exp {name} {tta_flag} --split oof --folds {new_folds}
+    !python -W ignore scripts/postprocess/tune_postprocess.py --exp {name} --workers 4 --fold {all_folds} \\
+        --thresholds 0.4 0.5 0.6 0.7 0.8 0.85 0.9 0.95 --min-areas 100 200 300 400 500 --min-scores 0
+    !python -W ignore scripts/postprocess/fit_rescorer.py --exp {name}
+    if (WORK / BASELINE / "oof").is_dir():
+        print("--- vs baseline, each with its own tuned post-processing:")
+        !python -W ignore scripts/evaluation/compare.py --a {WORK / BASELINE} --b {WORK / name} --folds {all_folds}
+        print("--- vs baseline, both with the baseline's post-processing:")
+        !python -W ignore scripts/evaluation/compare.py --a {WORK / BASELINE} --b {WORK / name} --folds {all_folds} --post a
+    print(json.dumps(json.loads((WORK / name / "rescorer.json").read_text()), indent=2))
+""")
+
+md("""
+## 4. Submissions (optional)
+
+For every entry in `SUBMISSIONS`: average the selected models (× 4 flips) on the test images, post-process, apply the
+classifier, and write `/kaggle/working/submission_<name>.csv`. Fold-0 screens usually skip this.
+""")
+code("""
+from filament.data.submission import read_submission, validate_submission
+from filament.paths import get_data_paths
+test_stems = [p.stem for p in get_data_paths().test_images.glob("*.jpeg")]
+for sub_name, (exp, models) in SUBMISSIONS.items():
+    print(f"\\n===== {sub_name}: {exp} {models} =====")
+    model_args = " ".join(f'"{m}"' for m in models)
+    !python -W ignore scripts/segmentation/predict.py --exp {exp} {tta_flag} --models {model_args} --out test_{sub_name}
+    !python -W ignore scripts/postprocess/make_submission.py --exp {exp} --maps test_{sub_name} --out submission_{sub_name}.csv
+    shutil.copy(WORK / exp / f"submission_{sub_name}.csv", WORK / f"submission_{sub_name}.csv")
+    sub = read_submission(WORK / f"submission_{sub_name}.csv")
+    print(f"{len(sub)} filaments on {sub.filament_id.str.rsplit('_', n=1).str[0].nunique()}/{len(test_stems)} images,",
+          "validation:", validate_submission(sub, expected_stems=test_stems) or "OK")
+""")
+
+md("""
+## 5. Keep the results
+
+Everything is in `/kaggle/working/<experiment>/` (checkpoints, OOF maps, logs, `postprocess.json`, `rescorer.json`).
+Download what you need from the **Output** tab, e.g. with the Kaggle CLI:
+`kaggle kernels output <user>/<notebook> -p outputs/kaggle_runs/<run> --file-pattern "<regex>"`.
+To reuse an experiment in a later session, add this notebook's output (or a dataset made from it) as an input and
+list it in `CHECKPOINT_DATASETS`.
+""")
+
+META = {
+    "kernelspec": {"name": "python3", "display_name": "Python 3", "language": "python"},
+    "language_info": {"name": "python"},
+    "kaggle": {"accelerator": "nvidiaTeslaT4", "isInternetEnabled": True},
+}
+nbf.write(nbf.v4.new_notebook(cells=cells, metadata=META), REPO_ROOT / "notebooks/kaggle/kaggle_train_submit.ipynb")
+
+# Second notebook for a parallel session (Kaggle allows 2 GPU sessions at once): same code, different experiments.
+SCREEN_CONFIG = '''
+# ---- configuration ---------------------------------------------------------------------------------------
+# Fold-0 re-runs of the two failed screens, compared against ConvNeXt-Tiny + U-Net: MiT-B2 + U-Net (out of memory
+# in full-image validation -> now tiled at 1024 px) and ConvNeXt-T + MAnet (fp16 overflow -> decoder in float32).
+EXPERIMENTS = [
+    {"config": "configs/segmentation/unet_mitb2_skel050.yaml",       "folds": [0], "full_seeds": [], "overrides": []},
+    {"config": "configs/segmentation/archive/manet_convnext_t_skel050.yaml", "folds": [0], "full_seeds": [], "overrides": []},
+]
+# attached inputs, matched by "<notebook>/<experiment>" in their path: this notebook's previous output
+# (Add Input -> Your Work -> Notebooks -> this notebook), which holds ConvNeXt-Tiny + U-Net fold 0 and its OOF maps
+CHECKPOINT_DATASETS = ["solar-filament-v2/unet_convnext_t_skel050"]
+BASELINE = "unet_convnext_t_skel050"   # same encoder with the U-Net decoder
+TTA = True                             # average 4 flips per model when predicting
+SUBMISSIONS = {                        # output name -> (experiment, [model names / glob patterns])
+    "unet_mitb2_fold0": ("unet_mitb2_skel050", ["fold0"]),
+    "manet_convnext_t_fold0": ("manet_convnext_t_skel050", ["fold0"]),
+}
+GITHUB_SECRET = "Github_key"           # label of the Kaggle secret holding the GitHub token
+WANDB_SECRET = "WANDB_API_KEY"         # label of the (optional) Kaggle secret holding the W&B API key
+REPO_URL = "github.com/LucaT2/solar-filament-segmentation.git"
+REPO_BRANCH = "main"
+REPO_DATASET = None                    # alternative to the GitHub token: name of a dataset containing the repo
+'''
+screen_cells = list(cells)
+screen_cells[1] = nbf.v4.new_code_cell(SCREEN_CONFIG.strip())
+screen_cells[0] = nbf.v4.new_markdown_cell(cells[0].source.replace(
+    "# Solar Filament Segmentation: experiments on Kaggle",
+    "# Solar Filament Segmentation: fold-0 screen (parallel session)"))
+nbf.write(nbf.v4.new_notebook(cells=screen_cells, metadata=META), REPO_ROOT / "notebooks/kaggle/kaggle_screen.ipynb")
+print("written", len(cells), "cells x 2 notebooks")

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from filament.folds import FOLDS_PATH, N_FOLDS, load_folds, make_folds
+from filament.data.folds import FOLDS_PATH, N_FOLDS, load_folds, make_folds
 
 
 def test_every_image_in_exactly_one_fold(ai):
@@ -33,6 +33,6 @@ def test_folds_are_deterministic(ai):
 
 def test_saved_folds_match_generator(ai):
     """configs/folds.csv is the single source of truth; it must not drift from the generator."""
-    assert FOLDS_PATH.exists(), "run: python scripts/make_folds.py"
+    assert FOLDS_PATH.exists(), "run: python scripts/setup/make_folds.py"
     saved = load_folds()
     pd.testing.assert_frame_equal(saved.reset_index(drop=True), make_folds(ai).reset_index(drop=True), check_dtype=False)

@@ -10,7 +10,7 @@ OFFICIAL_NOTEBOOK = REPO_ROOT / "self-evaluation-notebook.ipynb"
 
 @pytest.fixture(scope="session")
 def coco():
-    from filament.data import load_coco
+    from filament.data.annotations import load_coco
     from filament.paths import get_data_paths
 
     try:
@@ -22,14 +22,14 @@ def coco():
 
 @pytest.fixture(scope="session")
 def ann(coco):
-    from filament.data import annotation_table
+    from filament.data.annotations import annotation_table
 
     return annotation_table(coco)
 
 
 @pytest.fixture(scope="session")
 def ai(coco):
-    from filament.data import annotator_image_table
+    from filament.data.annotations import annotator_image_table
 
     return annotator_image_table(coco)
 

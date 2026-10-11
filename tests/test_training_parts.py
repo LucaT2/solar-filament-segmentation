@@ -5,8 +5,8 @@ import pytest
 import torch
 import torch.nn as nn
 
-from filament.dataset import tubed_skeleton
-from filament.model import BCEDiceLoss, SegLoss, predict_full
+from filament.segmentation.dataset import tubed_skeleton
+from filament.segmentation.model import BCEDiceLoss, SegLoss, predict_full
 
 
 def test_tubed_skeleton_is_thin_and_inside_the_mask():
@@ -37,8 +37,8 @@ def test_skeleton_recall_rewards_covering_the_centre_line():
 
 @pytest.fixture(scope="module")
 def three_annotator_dataset(ann, ai):
-    from filament.dataset import CropDataset, image_info
     from filament.paths import get_data_paths
+    from filament.segmentation.dataset import CropDataset, image_info
 
     stem = ai[ai.n_annotators == 3].stem.iloc[0]
     infos = {stem: image_info(get_data_paths().train_images / f"{stem}.jpeg")}
@@ -71,7 +71,7 @@ def test_consensus_mode_averages_annotators(three_annotator_dataset):
 
 
 def test_sampling_weights_follow_annotator_count(ann, ai):
-    from filament.dataset import CropDataset
+    from filament.segmentation.dataset import CropDataset
 
     stems = ai.drop_duplicates("stem").groupby("n_annotators").stem.first().tolist()  # one image each with 1, 2, 3
     ds = CropDataset(ann, {}, stems, samples_per_epoch=1)
@@ -80,7 +80,7 @@ def test_sampling_weights_follow_annotator_count(ann, ai):
 
 
 def test_decoder_fp32_runs_decoder_in_float32_under_autocast():
-    from filament.model import build_model
+    from filament.segmentation.model import build_model
 
     seen = {}
     model = build_model("Unet", "resnet34", pretrained=False, decoder_fp32=True)
@@ -104,7 +104,7 @@ class _Pointwise(nn.Module):
 
 @pytest.mark.parametrize("mode", ["none", "flip4", "d8"])
 def test_tta_transforms_are_exact_inverses(mode):
-    from filament.model import tta_transforms
+    from filament.segmentation.model import tta_transforms
 
     t = torch.randn(1, 1, 16, 16)
     transforms = tta_transforms(mode)

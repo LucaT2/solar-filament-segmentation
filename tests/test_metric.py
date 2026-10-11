@@ -5,9 +5,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from filament.data import ground_truth_table
-from filament.metric import pq_by_group, pq_score, summarize
-from filament.rle import mask_to_counts, rle_to_mask
+from filament.data.annotations import ground_truth_table
+from filament.data.rle import mask_to_counts, rle_to_mask
+from filament.evaluation.metric import pq_by_group, pq_score, summarize
 
 SIZE = 2048
 

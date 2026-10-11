@@ -1,6 +1,6 @@
 # Stage 1 findings
 
-Source: [notebooks/01_eda.ipynb](../notebooks/01_eda.ipynb) (analysis code in `src/filament/eda.py`). Literature:
+Source: [notebooks/analysis/01_eda.ipynb](../notebooks/analysis/01_eda.ipynb) (analysis code in `src/filament/analysis/eda.py`). Literature:
 [literature.md](literature.md).
 
 ## 1. Humans agree with each other at only PQ ≈ 0.34

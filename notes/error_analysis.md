@@ -1,6 +1,6 @@
 # Stage 4: Error analysis of the U-Net baseline
 
-Source: [notebooks/02_error_analysis.ipynb](../notebooks/02_error_analysis.ipynb) (code in `src/filament/error_analysis.py`).
+Source: [notebooks/analysis/02_error_analysis.ipynb](../notebooks/analysis/02_error_analysis.ipynb) (code in `src/filament/evaluation/error_analysis.py`).
 Model: `unet_r34` (U-Net ResNet34, 30 epochs), **fold 0 only** (142 images, 235 annotator-images, 1,643 true
 filaments). Post-processing: threshold 0.5, minimum area 300 px. **PQ 0.391** (SQ 0.676, RQ 0.578; TP 1,091,
 FP 1,043, FN 552). One fold is a small sample (±0.03 noise), so trends matter more than exact values.

@@ -30,7 +30,7 @@ images, and the organizers have said some leaderboard scores are gamed.
 ## Stage 0 — Setup
 - [x] Python 3.12 venv. PyTorch with CUDA ≥ 12.8 (needed for Blackwell), `segmentation_models_pytorch`, `timm`,
       `albumentations`, `pycocotools`, `opencv-python`, `scikit-image`. Pinned `requirements.txt`.
-      *(torch 2.11.0+cu128 on RTX 5070 sm_120 verified; `scripts/check_env.py` passes.)*
+      *(torch 2.11.0+cu128 on RTX 5070 sm_120 verified; `scripts/setup/check_env.py` passes.)*
 - [x] Git repo + GitHub remote (private now, public at the deadline).
 - [x] Code layout:
   - `src/filament/`: data, preprocess, rle, metric, models, postprocess, train, infer
@@ -49,19 +49,19 @@ images, and the organizers have said some leaderboard scores are gamed.
 - [x] **Leakage / splits:** test images are as close in time to train as train images are to each other → folds
       grouped by image stem match the test conditions.
 - [x] **Literature review** → [notes/literature.md](notes/literature.md).
-- [x] Deliverables: [notebooks/01_eda.ipynb](notebooks/01_eda.ipynb) + [notes/findings.md](notes/findings.md).
+- [x] Deliverables: [notebooks/analysis/01_eda.ipynb](notebooks/analysis/01_eda.ipynb) + [notes/findings.md](notes/findings.md).
 
 ## Stage 2 — Validation harness (before any model)
 - [x] Exact reimplementation of the official PQ, plus Dice/IoU distributions and 1:n / n:1 counts
-      (`src/filament/metric.py`). `tests/test_metric.py` checks it against the organizers' own functions, loaded from
+      (`src/filament/evaluation/metric.py`). `tests/test_metric.py` checks it against the organizers' own functions, loaded from
       their notebook, on deliberately damaged predictions (wider/thinner, shifted, dropped, split, merged, duplicated,
       false blobs, empty images, unknown images): **identical PQ and IoU matrices**.
 - [x] RLE round-trip tests; GT written through the submission writer and read back scores PQ = 1.0
-      (`tests/test_rle_submission.py`). Submission writer and validator in `src/filament/submission.py`.
+      (`tests/test_rle_submission.py`). Submission writer and validator in `src/filament/data/submission.py`.
 - [x] 5-fold cross-validation grouped by image stem, stratified by site × annotator count →
-      [configs/folds.csv](configs/folds.csv) (`scripts/make_folds.py`, guarded by `tests/test_folds.py`).
+      [configs/folds.csv](configs/folds.csv) (`scripts/setup/make_folds.py`, guarded by `tests/test_folds.py`).
 - [x] Multi-annotator ground truth scored per **annotator-image**, exactly like the official metric.
-- [x] OOF evaluator: `python scripts/evaluate.py --pred <csv> [--fold k]` → PQ/SQ/RQ, overlap and split/merge rates,
+- [x] OOF evaluator: `python scripts/evaluation/evaluate.py --pred <csv> [--fold k]` → PQ/SQ/RQ, overlap and split/merge rates,
       breakdowns by site, annotator count and fold.
 - **Noise level:** human-vs-human PQ ranges from 0.316 to 0.385 across folds. Compare models on 5-fold OOF PQ, not on
       single folds or the about 90-image public leaderboard.
@@ -77,8 +77,8 @@ images, and the organizers have said some leaderboard scores are gamed.
   - Trained on full-resolution 512–1024 crops; inference with an overlapping sliding window.
   - Connected components (no linking of nearby pieces) + minimum-area filter → instances → RLE.
   - Threshold and minimum area tuned for PQ on out-of-fold predictions.
-  - [x] Pipeline built: `scripts/train.py` / `predict.py` / `tune_postprocess.py` / `make_submission.py`,
-        config `configs/unet_r34.yaml`, Kaggle notebook `notebooks/kaggle_train_submit.ipynb`.
+  - [x] Pipeline built: `scripts/segmentation/train.py` / `predict.py` / `tune_postprocess.py` / `make_submission.py`,
+        config `configs/segmentation/unet_r34.yaml`, Kaggle notebook `notebooks/kaggle/kaggle_train_submit.ipynb`.
   - [x] Fold 0 trained locally (RTX 5070 laptop, ~40 min): **PQ 0.391** after tuning. On fold 0's multi-annotated
         images: model ≈ 0.38 vs human 0.328.
   - [x] Folds 1–4 trained locally (`scripts/run_pipeline.ps1`, ~2 h 40 min) → **5-fold OOF PQ 0.403** (folds
@@ -88,7 +88,7 @@ images, and the organizers have said some leaderboard scores are gamed.
 
 ## Stage 4 — Error analysis
 *Done on fold 0 only (142 images): [notes/error_analysis.md](notes/error_analysis.md),
-[notebooks/02_error_analysis.ipynb](notebooks/02_error_analysis.ipynb). Re-run with all folds once they exist.*
+[notebooks/analysis/02_error_analysis.ipynb](notebooks/analysis/02_error_analysis.ipynb). Re-run with all folds once they exist.*
 - [x] Error buckets vs human: model match 66% vs 54%, better in every bucket **except splits** (5.8% vs 2.9%;
       19% for filaments > 3,200 px).
 - [x] Breakdowns: small (35% missed, same as humans), unidentifiable (20% missed), near the limb (35% missed, n = 34);
@@ -103,7 +103,7 @@ Each step builds on the winner of the previous one; every idea is screened on fo
 with a paired comparison (ΔPQ with a confidence interval), and only winners get a 5-fold run (Kaggle T4×2).
 Cut-off for new architectures: ~Oct 29; then final ensemble, report, repo, form (deadline Nov 15).
 
-- [x] **Step 0 — tooling:** `scripts/compare.py` (paired ΔPQ + bootstrap CI on the same images; resolves ~0.01 on one
+- [x] **Step 0 — tooling:** `scripts/evaluation/compare.py` (paired ΔPQ + bootstrap CI on the same images; resolves ~0.01 on one
       fold: TTA vs no TTA on fold 0 = −0.0106, CI [−0.018, −0.002]); tiled prediction (`infer_tile`); the Kaggle
       notebook runs a list of EXPERIMENTS spread over the GPUs and compares each with the baseline.
 - [ ] **Step 1 — splits of large filaments:** 1024 px crops + Skeleton Recall loss + longer training (40–50 epochs);
@@ -134,27 +134,38 @@ Cut-off for new architectures: ~Oct 29; then final ensemble, report, repo, form 
       expandable CUDA segments, non-finite batches skipped and runs aborted once an epoch is mostly non-finite.
       Re-run of MiT-B2 + U-Net and MAnet (fp32 decoder) in `kaggle_screen.ipynb`; SegFormer dropped (1/4-res head).
 - [x] **Cheap tests (2026-10-11, fold 0, local):**
-      *Ensemble* ResNet34 skel050 + ConvNeXt-T (equal-weight map average, `scripts/ensemble_maps.py`): ΔPQ +0.002 vs
+      *Ensemble* ResNet34 skel050 + ConvNeXt-T (equal-weight map average, `scripts/postprocess/ensemble_maps.py`): ΔPQ +0.002 vs
       ConvNeXt [−0.007, +0.011], +0.012 vs ResNet34 [+0.002, +0.022]; with classifier 0.445 vs 0.439 / 0.435.
       *8-way TTA* (`--tta-mode d8`: 4 rotations × mirror): ConvNeXt +0.004 [−0.001, +0.009], ResNet34 +0.003
       [−0.002, +0.010] (better outlines); with classifier 0.446 / 0.441. *Both:* ensemble of 8-way maps + classifier
       **0.449** (threshold 0.8: averaged maps are softer). → Final recipe: multi-architecture ensemble + 8-way TTA.
-- [ ] **Step 3c — transformer encoder (prepared):** MiT-B2 (SegFormer's encoder) + U-Net (`unet_mitb2_skel050`) and
-      the original SegFormer head (`segformer_mitb2_skel050`); encoder lr ×0.1, weight decay 0.01 (SegFormer
-      fine-tuning defaults). Full 2048² inference needs 6.7 GiB (fine on a T4; tiled locally). In the main notebook,
-      in parallel with the decoder screen.
-- [ ] **Step 3b — decoders with ConvNeXt-Tiny** (prepared): UNet++ is incompatible (needs 1/2-res features);
-      screen **MAnet** (U-Net + attention, full-res) and **UPerNet** (multi-scale context, 1/4 res) on fold 0 vs
-      ConvNeXt + U-Net. Benchmarks at batch 8: U-Net 4.0 GiB / MAnet 4.4 / UPerNet 5.2 / FPN 4.0 / SegFormer 4.4.
-- [ ] **Step 3a — encoder screen (prepared 2026-10-10):** skel050 recipe with `tu-efficientnet_b4`
-      (`configs/unet_effb4_skel050.yaml`) and `tu-convnext_tiny` (`configs/unet_convnext_t_skel050.yaml`), fold 0, one per
-      GPU in `notebooks/kaggle_screen.ipynb`, compared against skel050 (ResNet34). Both: batch 16, lr 7e-4, encoder lr
+- [x] **Step 3c — transformer encoder:** MiT-B2 (SegFormer's encoder) + U-Net (`unet_mitb2_skel050`); encoder lr ×0.1,
+      weight decay 0.01 (SegFormer fine-tuning defaults), tiled 1024 px validation. *Result (2026-10-11):* ties
+      ConvNeXt-T, ΔPQ −0.001 [−0.013, +0.010]; LB 0.36. As a third ensemble member: +0.004 before the classifier,
+      −0.004 after (0.441 vs 0.445) → not added. SegFormer head dropped (1/4-res output).
+- [x] **Step 3b — decoders with ConvNeXt-Tiny:** UNet++ is incompatible (needs 1/2-res features); **MAnet**
+      (U-Net + attention, full-res) and **UPerNet** (multi-scale context, 1/4 res) on fold 0 vs ConvNeXt + U-Net.
+      *Result:* UPerNet −0.015, MAnet −0.006 [−0.015, +0.004] → **U-Net stays.** Benchmarks at batch 8: U-Net
+      4.0 GiB / MAnet 4.4 / UPerNet 5.2 / FPN 4.0 / SegFormer 4.4.
+- [x] **U-Net phase concluded (2026-10-11):** ConvNeXt-T ≈ MiT-B2 > ResNet34 > EfficientNet-B4; U-Net decoder;
+      Skeleton Recall 0.5; ensemble + 8-way TTA + classifier = best (fold-0 nested 0.449, LB 0.38). Recent screens all
+      fall within ±0.01. The forum (2026-10-11) suggests our gap is detection (RQ), not outlines (SQ) → next: Mask R-CNN
+      (Step 4) and the cheap classifier/size-filter extras.
+- [x] **Step 3a — encoder screen (2026-10-10):** skel050 recipe with `tu-efficientnet_b4`
+      (`configs/segmentation/archive/unet_effb4_skel050.yaml`) and `tu-convnext_tiny` (`configs/segmentation/unet_convnext_t_skel050.yaml`), fold 0, one per
+      GPU in `notebooks/kaggle/kaggle_screen.ipynb`, compared against skel050 (ResNet34). Both: batch 16, lr 7e-4, encoder lr
       ×0.25 (`encoder_lr_mult`), 2 warm-up epochs. Laptop benchmark at batch 8: EfficientNet-B4 5.8 GiB / ConvNeXt-T
       4.0 GiB / ResNet34 2.2 GiB; full 2048² inference ~2 GiB for all (no tiling needed).
-- [ ] **Step 3 — encoders, then decoders:** U-Net with ResNet34 / ConvNeXt-T / EfficientNet-B4 / MiT-B2 → best 1–2
+- [x] **Step 3 — encoders, then decoders:** U-Net with ResNet34 / ConvNeXt-T / EfficientNet-B4 / MiT-B2 → best 1–2
       encoders with U-Net / UNet++ / UPerNet or FPN. Per-encoder learning rate (lower for the encoder).
 - [ ] **Step 4 — other architectures** (time-boxed): Mask2Former if splits/grouping still dominate, HRNet or DSCNet if
-      boundaries do.
+      boundaries do. *Revised 2026-10-11:* first **Mask R-CNN** (torchvision ResNet50-FPN v2, COCO weights; package
+      `filament.detection` prepared), alone and combined with the U-Net (detection score as a classifier feature;
+      recovering missed filaments). Cascade Mask R-CNN / Mask2Former only if this shows the instance route helps.
+- [x] **Repo reorganised (2026-10-11):** library and scripts grouped by pipeline stage (`data`, `segmentation`,
+      `detection`, `postprocess`, `evaluation`, `analysis`); configs split into current and `archive/`; Kaggle notebooks
+      generated by `scripts/kaggle/build_notebooks.py`. Old `rescorer.pkl` files still load; rebuilt submissions are
+      byte-identical.
 - [ ] Cheap extras along the way: classifier features (fragment, probability spread, texture) + lower size filter,
       `pos_fraction` 0.5, disk-distance input channel, 8-way TTA, multi-scale TTA.
 
@@ -188,7 +199,7 @@ head and watershed. The PQ levers are boundary precision (±1 px), connectivity,
 
 ---
 
-## Kaggle notebook — `notebooks/kaggle_train_submit.ipynb`
+## Kaggle notebook — `notebooks/kaggle/kaggle_train_submit.ipynb`
 Kaggle itself only needs an uploaded CSV; this isn't a code competition. The notebook gives us free 16 GB GPUs and a
 single training → inference → submission run. It also becomes the basis for the **required** repo notebook that
 illustrates and reproduces the whole pipeline for the final judging.

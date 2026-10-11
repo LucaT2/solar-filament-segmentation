@@ -19,7 +19,7 @@ The busiest training image (26 filaments, many of them small and faint):
 
 ![Busiest image with 26 filament instances](figures/20140430071914Th_instances.png)
 
-Other images can be drawn with `python scripts/show_example.py --stem <name>` (or `--random 5`). Output goes to
+Other images can be drawn with `python scripts/figures/competition_example.py --stem <name>` (or `--random 5`). Output goes to
 `outputs/examples/`.
 
 ## What the competition is
@@ -38,7 +38,7 @@ separate instance, and each counts separately in the score.
 ## How Panoptic Quality (PQ) is calculated
 
 The leaderboard metric comes from Kirillov et al., *Panoptic Segmentation* (CVPR 2019). The details below follow the
-organizers' official evaluation code (the self-evaluation notebook), which our `src/filament/metric.py` reproduces.
+organizers' official evaluation code (the self-evaluation notebook), which our `src/filament/evaluation/metric.py` reproduces.
 
 ### Step 1: IoU between every true and every predicted filament
 

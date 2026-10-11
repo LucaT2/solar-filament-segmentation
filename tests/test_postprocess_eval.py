@@ -4,10 +4,10 @@ import cv2
 import numpy as np
 import pytest
 
-from filament.evaluation import GroundTruth, score_components
-from filament.metric import pq_from_rles, score_images
-from filament.postprocess import PostConfig, find_components, instances
-from filament.rle import mask_to_rle, rle_to_mask
+from filament.data.rle import mask_to_rle, rle_to_mask
+from filament.evaluation.metric import pq_from_rles, score_images
+from filament.evaluation.scoring import GroundTruth, score_components
+from filament.postprocess.components import PostConfig, find_components, instances
 
 
 def fake_prob(ann, aid, seed=0):
@@ -54,8 +54,8 @@ def test_link_keeps_original_pixels():
 
 
 def test_component_table_handles_empty_and_normal_maps():
-    from filament.preprocess import Disk
-    from filament.rescoring import Rescorer, component_table
+    from filament.data.images import Disk
+    from filament.postprocess.rescoring import Rescorer, component_table
 
     img = np.full((2048, 2048), 130, np.uint8)
     disk = Disk(1024.0, 1024.0, 950.0)

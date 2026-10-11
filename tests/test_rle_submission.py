@@ -2,9 +2,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from filament.data import ground_truth_table
-from filament.metric import pq_score
-from filament.rle import (
+from filament.data.annotations import ground_truth_table
+from filament.evaluation.metric import pq_score
+from filament.data.rle import (
     counts_to_mask,
     mask_to_counts,
     polygons_to_rle,
@@ -12,7 +12,7 @@ from filament.rle import (
     rle_iou,
     rle_to_mask,
 )
-from filament.submission import build_submission, read_submission, validate_submission, write_submission
+from filament.data.submission import build_submission, read_submission, validate_submission, write_submission
 
 
 def random_mask(rng, size=2048, n_blobs=3):
@@ -101,6 +101,6 @@ def test_rle_iou_matches_dense():
     a, b = random_mask(rng), random_mask(rng)
     b |= a & (rng.random(a.shape) < 0.5)
     dense = (a & b).sum() / (a | b).sum()
-    from filament.rle import mask_to_rle
+    from filament.data.rle import mask_to_rle
 
     assert rle_iou([mask_to_rle(a)], [mask_to_rle(b)])[0, 0] == pytest.approx(dense)
