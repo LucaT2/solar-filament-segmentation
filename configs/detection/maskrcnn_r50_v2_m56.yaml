@@ -9,13 +9,13 @@ trainable_layers: 3
 mask_size: 56
 detections_per_img: 100
 crop: 1024
-batch_size: 4
+batch_size: 8       # first screen (2026-10-11): 4, with lr 1.0e-4
 epochs: 16
 samples_per_epoch: 2000
 pos_fraction: 0.8
 min_instance_area: 30
 augment: base
-lr: 1.0e-4
+lr: 2.0e-4          # scaled with the batch (linear rule)
 weight_decay: 1.0e-4
 warmup_epochs: 1
 grad_clip: 10.0

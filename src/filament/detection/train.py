@@ -50,13 +50,13 @@ class DetTrainConfig:
     # single-model test maps (e.g. test_fold0) match them better than a softer multi-fold average
     detections_per_img: int = 100
     crop: int = 1024
-    batch_size: int = 4
+    batch_size: int = 8  # ~8.4 GiB with 56 px masks at 1024 px crops (~1 GiB per image; T4 ok, 8 GB laptop not)
     epochs: int = 24
     samples_per_epoch: int = 2000
     pos_fraction: float = 0.8
     min_instance_area: int = 30  # drop filament pieces smaller than this after cropping (px)
     augment: str = "base"
-    lr: float = 1e-4
+    lr: float = 2e-4  # for batch 8; scale linearly with the batch size
     weight_decay: float = 1e-4
     warmup_epochs: int = 1
     grad_clip: float = 10.0  # max gradient norm (0 = off)
