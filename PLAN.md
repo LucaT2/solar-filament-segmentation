@@ -222,10 +222,10 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 
 | 2026-10-10 | **skel050, 5 folds** (OOF on 707 images), 5-model avg + TTA + classifier | **0.412**; nested **0.436** | **0.38** (thr 0.90) / 0.37 (thr 0.95) | vs unet_r34: ΔPQ +0.010 [+0.005, +0.014]; `submission_skel050_5fold_thr095.csv` (Kaggle, thr 0.95) and `_thr090.csv` (thr 0.90, matched to the ensemble's thinner masks) |
 
-| 2026-10-10 | fold-0 screen: ConvNeXt-Tiny encoder (`unet_convnext_t_skel050`), batch 16 | **0.422 (f0)**; nested **0.439** | ? | vs skel050 (r34): ΔPQ +0.008 [−0.004, +0.018], P 0.92; SQ 0.679 |
+| 2026-10-10 | fold-0 screen: ConvNeXt-Tiny encoder (`unet_convnext_t_skel050`), batch 16 | **0.422 (f0)**; nested **0.439** | 0.38 | vs skel050 (r34): ΔPQ +0.008 [−0.004, +0.018], P 0.92; SQ 0.679 |
 | 2026-10-10 | fold-0 screen: EfficientNet-B4 encoder (`unet_effb4_skel050`), batch 16 | 0.408 (f0); nested 0.419 | ? | vs skel050: ΔPQ −0.007 [−0.021, +0.006] |
 
-| 2026-10-11 | fold-0 screen: ConvNeXt-T + **UPerNet** (`upernet_convnext_t_skel050`), thr 0.8 | 0.407 (f0); nested 0.431 | ? | vs ConvNeXt-T + U-Net: ΔPQ −0.015 [−0.024, −0.006]; SQ −0.0125 |
+| 2026-10-11 | fold-0 screen: ConvNeXt-T + **UPerNet** (`upernet_convnext_t_skel050`), thr 0.8 | 0.407 (f0); nested 0.431 | 0.37 | vs ConvNeXt-T + U-Net: ΔPQ −0.015 [−0.024, −0.006]; SQ −0.0125 |
 | 2026-10-11 | ConvNeXt-T + MAnet / MiT-B2 + U-Net / SegFormer | – | – | failed (NaN / out of memory); fixed and re-queued (MAnet, MiT-B2 + U-Net) |
 
 *Full-data models: no measurable gain on the public LB (all three at 0.37). Decision for the final recipe: optional; add 1–2 only if GPU time is left over at the end.*
