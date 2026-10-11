@@ -133,6 +133,12 @@ Cut-off for new architectures: ~Oct 29; then final ensemble, report, repo, form 
       Fixes: `decoder_fp32` (MAnet), 1024 px tiled validation/prediction (MiT), `empty_cache()` before validation,
       expandable CUDA segments, non-finite batches skipped and runs aborted once an epoch is mostly non-finite.
       Re-run of MiT-B2 + U-Net and MAnet (fp32 decoder) in `kaggle_screen.ipynb`; SegFormer dropped (1/4-res head).
+- [x] **Cheap tests (2026-10-11, fold 0, local):**
+      *Ensemble* ResNet34 skel050 + ConvNeXt-T (equal-weight map average, `scripts/ensemble_maps.py`): ΔPQ +0.002 vs
+      ConvNeXt [−0.007, +0.011], +0.012 vs ResNet34 [+0.002, +0.022]; with classifier 0.445 vs 0.439 / 0.435.
+      *8-way TTA* (`--tta-mode d8`: 4 rotations × mirror): ConvNeXt +0.004 [−0.001, +0.009], ResNet34 +0.003
+      [−0.002, +0.010] (better outlines); with classifier 0.446 / 0.441. *Both:* ensemble of 8-way maps + classifier
+      **0.449** (threshold 0.8: averaged maps are softer). → Final recipe: multi-architecture ensemble + 8-way TTA.
 - [ ] **Step 3c — transformer encoder (prepared):** MiT-B2 (SegFormer's encoder) + U-Net (`unet_mitb2_skel050`) and
       the original SegFormer head (`segformer_mitb2_skel050`); encoder lr ×0.1, weight decay 0.01 (SegFormer
       fine-tuning defaults). Full 2048² inference needs 6.7 GiB (fine on a T4; tiled locally). In the main notebook,
@@ -227,6 +233,9 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 
 | 2026-10-11 | fold-0 screen: ConvNeXt-T + **UPerNet** (`upernet_convnext_t_skel050`), thr 0.8 | 0.407 (f0); nested 0.431 | 0.37 | vs ConvNeXt-T + U-Net: ΔPQ −0.015 [−0.024, −0.006]; SQ −0.0125 |
 | 2026-10-11 | ConvNeXt-T + MAnet / MiT-B2 + U-Net / SegFormer | – | – | failed (NaN / out of memory); fixed and re-queued (MAnet, MiT-B2 + U-Net) |
+| 2026-10-11 | local: ensemble ResNet34 skel050 + ConvNeXt-T (fold-0 maps, 4 flips) | 0.424 (f0); nested 0.445 | – | vs ConvNeXt +0.002 [−0.007, +0.011] |
+| 2026-10-11 | local: 8-way TTA, ConvNeXt-T / ResNet34 skel050 | 0.426 / 0.415 (f0); nested 0.446 / 0.441 | – | +0.004 / +0.003 vs 4 flips |
+| 2026-10-11 | local: ensemble of both with 8-way TTA, thr 0.8 | 0.424 (f0); nested **0.449** | – | best fold-0 result so far |
 
 *Full-data models: no measurable gain on the public LB (all three at 0.37). Decision for the final recipe: optional; add 1–2 only if GPU time is left over at the end.*
 

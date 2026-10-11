@@ -15,7 +15,7 @@ import argparse
 import json
 import shutil
 
-from filament.paths import REPO_ROOT, get_output_dir
+from filament.paths import REPO_ROOT, get_output_dir, resolve_exp_dir
 
 PATTERNS = ["fold*.pt", "full_s*.pt", "postprocess.json", "rescorer.json", "config.yaml", "log_*.csv", "result_*.json"]
 
@@ -33,7 +33,7 @@ def main() -> None:
     parser.add_argument("--slug", help="dataset slug (default: solar-filament-<exp with _ -> ->)")
     args = parser.parse_args()
 
-    exp_dir = get_output_dir(args.exp)
+    exp_dir = resolve_exp_dir(args.exp)  # name or folder path
     slug = args.slug or f"solar-filament-{args.exp.replace('_', '-')}"
     dst = REPO_ROOT / "outputs" / "kaggle_upload" / slug
     if dst.exists():

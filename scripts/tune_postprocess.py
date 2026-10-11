@@ -20,7 +20,7 @@ from filament.data import annotation_table, load_coco
 from filament.evaluation import GroundTruth, grid_search
 from filament.folds import load_folds
 from filament.inference import save_postprocess
-from filament.paths import get_data_paths, get_output_dir
+from filament.paths import get_data_paths, get_output_dir, resolve_exp_dir
 from filament.postprocess import PostConfig
 from filament.tracking import start_run
 
@@ -40,7 +40,7 @@ def main() -> None:
     args = parser.parse_args()
 
     paths = get_data_paths()
-    exp_dir = Path(args.exp) if Path(args.exp).is_dir() else get_output_dir(args.exp)  # name or folder path
+    exp_dir = resolve_exp_dir(args.exp)  # name or folder path
     folds = load_folds()
     if args.fold:
         folds = folds[folds.fold.isin(args.fold)]

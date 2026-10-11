@@ -27,7 +27,7 @@ from filament.metric import score_images
 from filament.postprocess import find_components
 from filament.folds import load_folds
 from filament.inference import load_postprocess
-from filament.paths import get_data_paths, get_output_dir
+from filament.paths import get_data_paths, get_output_dir, resolve_exp_dir
 from filament.rescoring import Rescorer, feature_matrix, make_classifier, oof_probabilities
 from filament.tracking import start_run
 
@@ -69,7 +69,7 @@ def main() -> None:
     args = parser.parse_args()
 
     paths = get_data_paths()
-    exp_dir = get_output_dir(args.exp)
+    exp_dir = resolve_exp_dir(args.exp)  # name or folder path
     cfg = load_postprocess(exp_dir / "postprocess.json")
     folds = load_folds()
     available = {p.stem for p in (exp_dir / "oof").glob("*.png")}

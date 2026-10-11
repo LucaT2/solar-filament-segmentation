@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 
 from filament.inference import load_postprocess, probs_to_submission
-from filament.paths import get_data_paths, get_output_dir
+from filament.paths import get_data_paths, get_output_dir, resolve_exp_dir
 from filament.rescoring import Rescorer
 from filament.submission import validate_submission, write_submission
 
@@ -25,7 +25,7 @@ def main() -> None:
     args = parser.parse_args()
 
     paths = get_data_paths()
-    exp_dir = get_output_dir(args.exp)
+    exp_dir = resolve_exp_dir(args.exp)  # name or folder path
     cfg = load_postprocess(exp_dir / "postprocess.json")
     rescorer = None
     if (exp_dir / "rescorer.pkl").exists() and not args.no_rescore:

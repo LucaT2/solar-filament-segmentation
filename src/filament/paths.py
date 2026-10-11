@@ -68,6 +68,12 @@ def get_data_paths() -> DataPaths:
     return DataPaths(find_data_root())
 
 
+def resolve_exp_dir(exp: str) -> Path:
+    """An experiment given by name (-> outputs/<name>) or by an existing folder path."""
+    p = Path(exp)
+    return p if p.is_dir() else get_output_dir(exp)
+
+
 def get_output_dir(name: str = "") -> Path:
     """Directory for checkpoints, predictions and submissions (git-ignored locally)."""
     base = KAGGLE_WORKING if on_kaggle() else REPO_ROOT / "outputs"

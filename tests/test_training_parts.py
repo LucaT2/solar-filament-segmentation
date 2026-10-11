@@ -102,6 +102,21 @@ class _Pointwise(nn.Module):
         return 3 * x - 1
 
 
+@pytest.mark.parametrize("mode", ["none", "flip4", "d8"])
+def test_tta_transforms_are_exact_inverses(mode):
+    from filament.model import tta_transforms
+
+    t = torch.randn(1, 1, 16, 16)
+    transforms = tta_transforms(mode)
+    assert len(transforms) == {"none": 1, "flip4": 4, "d8": 8}[mode]
+    outputs = []
+    for fwd, inv in transforms:
+        assert torch.equal(inv(fwd(t)), t)
+        outputs.append(fwd(t))
+    # all transformed versions are distinct (no symmetry counted twice) for a random image
+    assert len({tuple(o.flatten().tolist()) for o in outputs}) == len(transforms)
+
+
 def test_tiled_prediction_matches_full_image():
     x = np.random.default_rng(0).normal(size=(512, 512)).astype(np.float32)
     dev = torch.device("cpu")

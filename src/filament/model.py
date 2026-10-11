@@ -119,6 +119,35 @@ def _forward_tiled(model: nn.Module, t: torch.Tensor, tile: int, overlap: int) -
     return acc / norm.clamp_min(1e-6)
 
 
+def tta_transforms(mode) -> list[tuple]:
+    """(forward, inverse) pairs on (B, C, H, W) tensors.
+
+    False / "none": identity only; True / "flip4": identity + horizontal, vertical and both flips;
+    "d8": all 8 symmetries of the square (4 rotations x optional mirror flip; needs H == W).
+    """
+    ident = (lambda t: t, lambda t: t)
+    if mode in (False, None, "none"):
+        return [ident]
+    if mode in (True, "flip4"):
+        return [ident] + [(lambda t, d=d: torch.flip(t, d), lambda t, d=d: torch.flip(t, d))
+                          for d in [(-1,), (-2,), (-2, -1)]]
+    if mode == "d8":
+        out = []
+        for k in range(4):
+            for flip in (False, True):
+                def fwd(t, k=k, flip=flip):
+                    t = torch.rot90(t, k, dims=(-2, -1))
+                    return torch.flip(t, (-1,)) if flip else t
+
+                def inv(t, k=k, flip=flip):
+                    t = torch.flip(t, (-1,)) if flip else t
+                    return torch.rot90(t, -k, dims=(-2, -1))
+
+                out.append((fwd, inv))
+        return out
+    raise ValueError(f"unknown TTA mode {mode!r}")
+
+
 @torch.no_grad()
 def predict_full(
     models: list[nn.Module],
@@ -136,15 +165,15 @@ def predict_full(
     blended linearly over ``overlap`` px.
     """
     t = torch.from_numpy(x)[None, None].to(device)
-    flips = [(), (-1,), (-2,), (-2, -1)] if tta else [()]
+    transforms = tta_transforms(tta)
     acc = torch.zeros_like(t, dtype=torch.float32)
     for model in models:
-        for dims in flips:
-            inp = torch.flip(t, dims) if dims else t
+        for fwd, inv in transforms:
+            inp = fwd(t)
             with torch.autocast(device.type, dtype=amp_dtype, enabled=amp_dtype is not None and device.type == "cuda"):
                 if tile:
                     out = _forward_tiled(model, inp, tile, overlap)
                 else:
                     out = torch.sigmoid(model(inp).float())
-            acc += torch.flip(out, dims) if dims else out
-    return (acc / (len(models) * len(flips)))[0, 0].cpu().numpy()
+            acc += inv(out)
+    return (acc / (len(models) * len(transforms)))[0, 0].cpu().numpy()

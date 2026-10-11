@@ -28,7 +28,7 @@ from filament.dataset import image_info, normalize_with
 from filament.folds import load_folds
 from filament.inference import save_prob
 from filament.model import build_model, predict_full
-from filament.paths import get_data_paths, get_output_dir
+from filament.paths import get_data_paths, get_output_dir, resolve_exp_dir
 from filament.preprocess import read_image
 from filament.train import amp_dtype
 
@@ -59,14 +59,16 @@ def main() -> None:
     parser.add_argument("--exp", required=True)
     parser.add_argument("--models", nargs="+", default=["fold*"], help="checkpoint names or glob patterns")
     parser.add_argument("--folds", type=int, nargs="*", help="shorthand for --models fold<k> ...")
-    parser.add_argument("--tta", action="store_true", help="average over 4 flips")
+    parser.add_argument("--tta", action="store_true", help="average over 4 flips (= --tta-mode flip4)")
+    parser.add_argument("--tta-mode", choices=["none", "flip4", "d8"],
+                        help="test-time augmentation: d8 = 4 rotations x mirror (8 passes per model)")
     parser.add_argument("--split", choices=["test", "oof"], default="test")
     parser.add_argument("--out", help="output sub-folder of outputs/<exp>/ (default: the split name)")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     paths = get_data_paths()
-    exp_dir = get_output_dir(args.exp)
+    exp_dir = resolve_exp_dir(args.exp)  # name or folder path
     patterns = [f"fold{k}" for k in args.folds] if args.folds is not None else args.models
     out_dir = exp_dir / (args.out or args.split)
 
@@ -83,17 +85,18 @@ def main() -> None:
             models, cfg = load_models([ckpt], device)
             jobs.append((models, [paths.train_images / f"{s}.jpeg" for s in folds.stem[folds.fold == k]], cfg))
 
+    tta = args.tta_mode or ("flip4" if args.tta else "none")
     t0, n = time.time(), 0
     for models, images, cfg in jobs:
         dtype = amp_dtype(cfg.get("amp", "fp16"))
         tiling = {"tile": cfg.get("infer_tile"), "overlap": cfg.get("infer_overlap", 128)}
         for path in tqdm(images, desc=args.split):
             info = image_info(path)
-            prob = predict_full(models, normalize_with(read_image(path), info), device, tta=args.tta, amp_dtype=dtype,
+            prob = predict_full(models, normalize_with(read_image(path), info), device, tta=tta, amp_dtype=dtype,
                                 **tiling)
             save_prob(out_dir, path.stem, prob)
         n += len(images)
-    print(f"{n} {args.split} maps (tta={args.tta}) in {time.time() - t0:.0f}s -> {out_dir}")
+    print(f"{n} {args.split} maps (tta={tta}) in {time.time() - t0:.0f}s -> {out_dir}")
 
 
 if __name__ == "__main__":
