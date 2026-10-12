@@ -1,8 +1,10 @@
 # Cascade Mask R-CNN (filament.detection.cascade): three box stages trained at IoU 0.5 / 0.6 / 0.7 (box-regression
 # weights 10/20/30, stage loss weights 1 / 0.5 / 0.25), each refining the previous stage's boxes; score = mean of the
-# stages, box = last stage; mask head (56 x 56) on the final boxes. All other settings as
-# maskrcnn/maskrcnn_r50_v2_m56_ftall.yaml (whole backbone at lr x 0.25, batch 6, 2 warm-up epochs, 32 epochs), so
-# the two runs differ only in the box heads. ~11.3 GiB at batch 6 (1.9 GiB per image; batch 8 would need ~15 GiB).
+# stages, box = last stage; mask head (56 x 56) on the final boxes. Otherwise as
+# maskrcnn/maskrcnn_r50_v2_m56_ftall.yaml (whole backbone at lr x 0.25, 2 warm-up epochs), except:
+# * batch 4 / lr 1e-4 (linear scaling): batch 6 ran out of memory on a T4 in epoch 2 (> 14.5 GiB on crops with many
+#   filaments); ~7.5 GiB measured at batch 4 on average crops
+# * 28 epochs: the whole-backbone Mask R-CNN peaked at epoch 26 and was flat from ~22
 name: cascade_r50_v2_m56_ftall
 arch: cascade
 pretrained: true
@@ -11,13 +13,13 @@ backbone_lr_mult: 0.25
 mask_size: 56
 detections_per_img: 100
 crop: 1024
-batch_size: 6
-epochs: 32
+batch_size: 4
+epochs: 28
 samples_per_epoch: 2000
 pos_fraction: 0.8
 min_instance_area: 30
 augment: base
-lr: 1.5e-4
+lr: 1.0e-4
 weight_decay: 1.0e-4
 warmup_epochs: 2
 grad_clip: 10.0
