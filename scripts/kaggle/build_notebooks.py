@@ -316,13 +316,16 @@ nbf.write(nbf.v4.new_notebook(cells=cells, metadata=META), REPO_ROOT / "notebook
 # Second notebook for a parallel session (Kaggle allows 2 GPU sessions at once): same code, different experiments.
 SCREEN_CONFIG = '''
 # ---- configuration ---------------------------------------------------------------------------------------
-# One per GPU:
-# * GPU 0: Cascade Mask R-CNN, fold 0 (re-run at batch 4 after running out of memory at batch 6), compared with the
-#   whole-backbone Mask R-CNN fold 0 loaded from the previous output
-# * GPU 1: the whole-backbone Mask R-CNN on fold 1, the next model of the 5-fold set for the final submission
+# One per GPU, sized for a limited GPU quota (~4.2 h in total; 569-640 s per epoch on a T4). max_hours stops a job
+# cleanly after the last epoch that still fits, keeping its best model and OOF predictions:
+# * GPU 0: Cascade Mask R-CNN, fold 0 (re-run at batch 4 after running out of memory at batch 6), 20 epochs,
+#   compared with the whole-backbone Mask R-CNN fold 0 loaded from the previous output
+# * GPU 1: the whole-backbone Mask R-CNN on fold 1, 22 epochs, the next model of the 5-fold set
 EXPERIMENTS = [
-    {"config": "configs/detection/cascade/cascade_r50_v2_m56_ftall.yaml",   "folds": [0], "full_seeds": [], "overrides": []},
-    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m56_ftall.yaml", "folds": [1], "full_seeds": [], "overrides": []},
+    {"config": "configs/detection/cascade/cascade_r50_v2_m56_ftall.yaml",   "folds": [0], "full_seeds": [],
+     "overrides": ["epochs=20", "max_hours=3.8"]},
+    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m56_ftall.yaml", "folds": [1], "full_seeds": [],
+     "overrides": ["epochs=22", "max_hours=3.8"]},
 ]
 # attached inputs, matched by "<notebook>/<experiment>" in their path: this notebook's previous output
 # (Add Input -> Your Work -> Notebooks -> this notebook), holding ConvNeXt-Tiny + U-Net fold 0 and the whole-backbone

@@ -69,6 +69,7 @@ class DetTrainConfig:
     val_score_thresholds: list = field(default_factory=lambda: [0.3, 0.5, 0.7])
     val_min_area: int = 100
     log_every: int = 50  # print progress every this many steps (0 = only per epoch)
+    max_hours: float | None = None  # time budget: stop after the last epoch that still fits (keeps the best model)
     seed: int = 42
     wandb: str = "auto"  # auto | on | offline | off (see filament.tracking)
     wandb_project: str | None = None
@@ -184,6 +185,7 @@ def run(cfg: DetTrainConfig, fold: int) -> dict:
     )
     stamp(f"tracking: {tracker.run.url if tracker.active else 'off'}; training {len(loader)} steps per epoch", t_start)
     best, log = -1.0, []
+    t_loop = time.time() - t_start  # setup time, excluded from the per-epoch estimate
     for epoch in range(1, cfg.epochs + 1):
         model.train()
         set_input_size(model, cfg.crop)
@@ -242,6 +244,15 @@ def run(cfg: DetTrainConfig, fold: int) -> dict:
         pd.DataFrame(log).to_csv(out / f"log_{tag}.csv", index=False)
         tracker.log({k.replace("pq@", "val/pq@score"): v for k, v in row.items()}, step=epoch)
         print(" ".join(f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}" for k, v in row.items()), flush=True)
+        if cfg.max_hours and epoch < cfg.epochs:
+            elapsed = time.time() - t_start
+            per_epoch = (elapsed - t_loop) / epoch
+            # room for one more epoch (with a validation) and the final OOF pass, with a 10% margin
+            if elapsed + 1.1 * per_epoch + 2 * (row.get("val_s") or 120) > cfg.max_hours * 3600:
+                stamp(f"time budget of {cfg.max_hours} h reached after epoch {epoch}: stopping early", t_start)
+                if best < 0:  # no validated checkpoint yet (or a full-data model): keep the current model
+                    torch.save({"model": model.state_dict(), "config": asdict(cfg), "epoch": epoch}, ckpt_path)
+                break
 
     result = {"fold": fold, "best_val_pq": best}
     if gt is not None:
