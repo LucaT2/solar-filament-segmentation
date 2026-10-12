@@ -42,7 +42,8 @@ from filament.tracking import start_run
 class DetTrainConfig:
     name: str = "maskrcnn_r50_v2"
     pretrained: bool = True  # COCO weights
-    trainable_layers: int = 3  # ResNet stages fine-tuned (0-5); the rest stay frozen
+    trainable_layers: int = 3  # ResNet stages fine-tuned (0-5); the rest stay frozen (5 = whole backbone)
+    backbone_lr_mult: float = 1.0  # backbone learning rate = lr * this (the FPN and the heads use lr)
     mask_size: int = 28  # mask head output (28 = torchvision default; 56 = finer, more memory)
     guide: str | None = None  # segmentation experiment whose probability maps become the 2nd input channel
     # (its oof/ maps for training images; OOF, so no image's guide comes from a model that saw its labels)
@@ -158,7 +159,15 @@ def run(cfg: DetTrainConfig, fold: int) -> dict:
     model = build_from_config(cfg).to(device)
     stamp(f"model ready on {device}", t_start)
     params = [p for p in model.parameters() if p.requires_grad]
-    opt = torch.optim.AdamW(params, lr=cfg.lr, weight_decay=cfg.weight_decay)
+    backbone_ids = {id(p) for p in model.backbone.body.parameters()}  # the ResNet itself, not the FPN
+    param_groups = [
+        {"params": [p for p in params if id(p) in backbone_ids], "lr": cfg.lr * cfg.backbone_lr_mult},
+        {"params": [p for p in params if id(p) not in backbone_ids], "lr": cfg.lr},
+    ]
+    opt = torch.optim.AdamW(param_groups, lr=cfg.lr, weight_decay=cfg.weight_decay)
+    stamp(f"trainable parameters: backbone {sum(p.numel() for p in param_groups[0]['params']) / 1e6:.1f} M "
+          f"(lr {cfg.lr * cfg.backbone_lr_mult:.1e}), rest {sum(p.numel() for p in param_groups[1]['params']) / 1e6:.1f} M "
+          f"(lr {cfg.lr:.1e})", t_start)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda(cfg, len(loader)))
     scaler = torch.amp.GradScaler(enabled=cfg.amp == "fp16" and device.type == "cuda")
     dtype = amp_dtype(cfg.amp)
@@ -204,7 +213,8 @@ def run(cfg: DetTrainConfig, fold: int) -> dict:
                 parts.setdefault(k, []).append(v.item())
         row = {"epoch": epoch, "loss": float(np.mean(losses)) if losses else float("nan"),
                **{k: float(np.mean(v)) for k, v in parts.items()},
-               "lr": sched.get_last_lr()[0], "train_s": time.time() - t0, "skipped_batches": skipped}
+               "lr": sched.get_last_lr()[-1], "lr_backbone": sched.get_last_lr()[0], "train_s": time.time() - t0,
+               "skipped_batches": skipped}
         if skipped > 0.5 * len(loader):
             log.append(row)
             pd.DataFrame(log).to_csv(out / f"log_{tag}.csv", index=False)

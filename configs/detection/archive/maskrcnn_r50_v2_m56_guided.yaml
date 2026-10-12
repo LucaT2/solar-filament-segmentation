@@ -1,0 +1,35 @@
+# Screened 2026-10-12: 0.438 vs plain 0.442 (inherits the U-Net's misses) -> dropped. Settings as run.
+# Guided variant: the U-Net's out-of-fold probability map (unet_r34_skel050, 5 folds, so every training image has
+# one from a model that never saw it) is the 2nd input channel. The detector starts from the U-Net's per-pixel answer
+# and learns which pixels form one filament and how confident to be: the 'detect, then segment' split, aimed at our
+# main errors (split filaments, false positives). Everything else as maskrcnn_r50_v2_m56.
+# Step 4: first instance model. torchvision Mask R-CNN ResNet50-FPN v2 (COCO weights), heads for 1 class.
+# Mask head at 56 x 56 instead of torchvision's 28 x 28 (RoI 28 instead of 14): finer outlines for thin filaments,
+# the known weak spot of Mask R-CNN. ~5 GiB peak at batch 4. Trained on 1024 px crops at native resolution (no
+# resizing), predicted on full 2048 px images; same augmentations and annotator sampling as the U-Net. Raw detections
+# are saved; mask threshold and score cut-off are tuned afterwards on OOF PQ (scripts/postprocess/tune_postprocess.py).
+name: maskrcnn_r50_v2_m56_guided
+pretrained: true
+trainable_layers: 3
+mask_size: 56
+guide: unet_r34_skel050
+guide_test_maps: test_fold0   # fold-0 model's test maps: same kind of map as the OOF guide in training
+detections_per_img: 100
+crop: 1024
+batch_size: 4
+epochs: 16
+samples_per_epoch: 2000
+pos_fraction: 0.8
+min_instance_area: 30
+augment: base
+lr: 1.0e-4
+weight_decay: 1.0e-4
+warmup_epochs: 1
+grad_clip: 10.0
+amp: fp16
+num_workers: 4
+val_every: 2
+val_mask_threshold: 0.5
+val_score_thresholds: [0.3, 0.5, 0.7]
+val_min_area: 100
+seed: 42

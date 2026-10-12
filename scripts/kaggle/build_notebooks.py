@@ -316,23 +316,21 @@ nbf.write(nbf.v4.new_notebook(cells=cells, metadata=META), REPO_ROOT / "notebook
 # Second notebook for a parallel session (Kaggle allows 2 GPU sessions at once): same code, different experiments.
 SCREEN_CONFIG = '''
 # ---- configuration ---------------------------------------------------------------------------------------
-# Step 4, fold-0 screen of Mask R-CNN (ResNet50-FPN v2, 56 x 56 masks), compared against ConvNeXt-Tiny + U-Net,
-# one per GPU: plain (image only), and guided (2nd input channel = the U-Net's out-of-fold probability map).
+# Mask R-CNN (ResNet50-FPN v2, 56 x 56 masks, batch 8), fold 0, 32 epochs, one per GPU:
+# the current setup trained longer (the 16-epoch run was still improving), and the same with the whole backbone
+# trained at a quarter of the learning rate. Each run's log also shows its validation PQ at epochs 16 and 24.
 EXPERIMENTS = [
-    {"config": "configs/detection/maskrcnn_r50_v2_m56.yaml",        "folds": [0], "full_seeds": [], "overrides": []},
-    {"config": "configs/detection/maskrcnn_r50_v2_m56_guided.yaml", "folds": [0], "full_seeds": [], "overrides": []},
+    {"config": "configs/detection/maskrcnn_r50_v2_m56.yaml",       "folds": [0], "full_seeds": [], "overrides": []},
+    {"config": "configs/detection/maskrcnn_r50_v2_m56_ftall.yaml", "folds": [0], "full_seeds": [], "overrides": []},
 ]
-# attached inputs, matched by "<notebook>/<experiment>" or dataset name in their path:
-# * this notebook's previous output (Add Input -> Your Work -> Notebooks -> this notebook): ConvNeXt-Tiny + U-Net
-#   fold 0 with its OOF maps, the baseline
-# * dataset solar-filament-unet-r34-skel050-maps (Add Input -> Your Work -> Datasets): the 5-fold ResNet34 U-Net's
-#   OOF + test maps, the guide input of the guided model
-CHECKPOINT_DATASETS = ["solar-filament-v2/unet_convnext_t_skel050", "solar-filament-unet-r34-skel050-maps"]
-BASELINE = "unet_convnext_t_skel050"   # best single fold-0 model
+# attached inputs, matched by "<notebook>/<experiment>" in their path: this notebook's previous output
+# (Add Input -> Your Work -> Notebooks -> this notebook), which holds ConvNeXt-Tiny + U-Net fold 0 and its OOF maps
+CHECKPOINT_DATASETS = ["solar-filament-v2/unet_convnext_t_skel050"]
+BASELINE = "unet_convnext_t_skel050"   # best single fold-0 U-Net (the 16-epoch Mask R-CNN is compared locally)
 TTA = True                             # U-Net only: average 4 flips per model when predicting
 SUBMISSIONS = {                        # output name -> (experiment, [model names / glob patterns])
-    "maskrcnn_m56_fold0": ("maskrcnn_r50_v2_m56", ["fold0"]),
-    "maskrcnn_m56_guided_fold0": ("maskrcnn_r50_v2_m56_guided", ["fold0"]),
+    "maskrcnn_m56_e32_fold0": ("maskrcnn_r50_v2_m56", ["fold0"]),
+    "maskrcnn_m56_ftall_fold0": ("maskrcnn_r50_v2_m56_ftall", ["fold0"]),
 }
 GITHUB_SECRET = "Github_key"           # label of the Kaggle secret holding the GitHub token
 WANDB_SECRET = "WANDB_API_KEY"         # label of the (optional) Kaggle secret holding the W&B API key
