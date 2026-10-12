@@ -1,8 +1,8 @@
 """Train Mask R-CNN on one fold (or several folds / all data).
 
 Usage:
-    python scripts/detection/train.py --config configs/detection/maskrcnn_r50_v2.yaml --fold 0
-    python scripts/detection/train.py --config configs/detection/maskrcnn_r50_v2.yaml --fold 0 \
+    python scripts/detection/train.py --config configs/detection/maskrcnn/maskrcnn_r50_v2_m56.yaml --fold 0
+    python scripts/detection/train.py --config configs/detection/maskrcnn/maskrcnn_r50_v2_m56.yaml --fold 0 \
         --set epochs=1 samples_per_epoch=40 batch_size=2 num_workers=0                          # smoke test
 """
 

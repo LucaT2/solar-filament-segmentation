@@ -1,0 +1,30 @@
+# Mask R-CNN, first fold-0 screen (2026-10-12): fold-0 OOF PQ 0.442 (vs 0.422 for ConvNeXt-T + U-Net), LB 0.38.
+# torchvision Mask R-CNN ResNet50-FPN v2 (COCO weights), heads for 1 class; mask head at 56 x 56 instead of 28 x 28
+# (RoI 28 instead of 14) for finer outlines. Trained on 1024 px crops at native resolution (no resizing), predicted
+# on full 2048 px images; same augmentations and annotator sampling as the U-Net. Raw detections are saved; mask
+# threshold and score cut-off are tuned afterwards on OOF PQ (scripts/postprocess/tune_postprocess.py).
+# Settings as run (still improving at the last epoch).
+name: maskrcnn_r50_v2_m56
+arch: maskrcnn
+pretrained: true
+trainable_layers: 3       # conv1 + layer1 frozen
+mask_size: 56
+detections_per_img: 100
+crop: 1024
+batch_size: 4
+epochs: 16
+samples_per_epoch: 2000
+pos_fraction: 0.8
+min_instance_area: 30
+augment: base
+lr: 1.0e-4
+weight_decay: 1.0e-4
+warmup_epochs: 1
+grad_clip: 10.0
+amp: fp16
+num_workers: 4
+val_every: 2
+val_mask_threshold: 0.5
+val_score_thresholds: [0.3, 0.5, 0.7]
+val_min_area: 100
+seed: 42

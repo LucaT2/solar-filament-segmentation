@@ -1,8 +1,8 @@
 """Train one fold of Mask R-CNN and write its out-of-fold instance predictions.
 
 Usage (via scripts/detection/train.py):
-    python scripts/detection/train.py --config configs/detection/maskrcnn_r50_v2.yaml --fold 0
-    python scripts/detection/train.py --config configs/detection/maskrcnn_r50_v2.yaml --fold 0 \
+    python scripts/detection/train.py --config configs/detection/maskrcnn/maskrcnn_r50_v2_m56.yaml --fold 0
+    python scripts/detection/train.py --config configs/detection/maskrcnn/maskrcnn_r50_v2_m56.yaml --fold 0 \
         --set epochs=1 samples_per_epoch=40 batch_size=2                                     # smoke test
 
 Outputs (outputs/<name>/): fold<k>.pt (best checkpoint by validation PQ), log_fold<k>.csv, result_fold<k>.json and
@@ -41,6 +41,7 @@ from filament.tracking import start_run
 @dataclass
 class DetTrainConfig:
     name: str = "maskrcnn_r50_v2"
+    arch: str = "maskrcnn"  # maskrcnn | cascade (three box stages at IoU 0.5 / 0.6 / 0.7)
     pretrained: bool = True  # COCO weights
     trainable_layers: int = 3  # ResNet stages fine-tuned (0-5); the rest stay frozen (5 = whole backbone)
     backbone_lr_mult: float = 1.0  # backbone learning rate = lr * this (the FPN and the heads use lr)
@@ -88,7 +89,8 @@ class DetTrainConfig:
 def build_from_config(cfg: dict | DetTrainConfig, pretrained: bool | None = None):
     c = cfg if isinstance(cfg, dict) else asdict(cfg)
     return build_maskrcnn(c["pretrained"] if pretrained is None else pretrained, c["trainable_layers"],
-                          c["detections_per_img"], mask_size=c["mask_size"], size=c["crop"])
+                          c["detections_per_img"], mask_size=c["mask_size"], size=c["crop"],
+                          arch=c.get("arch", "maskrcnn"))
 
 
 def guide_dir(cfg: dict | DetTrainConfig, split: str) -> Path | None:
@@ -178,7 +180,7 @@ def run(cfg: DetTrainConfig, fold: int) -> dict:
         cfg.wandb, name=f"{cfg.name}-{tag}", group=cfg.name, job_type="train",
         config={**asdict(cfg), "fold": fold, "n_train_images": len(train_stems), "n_val_images": len(val_stems),
                 "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else "cpu"},
-        tags=["maskrcnn"], project=cfg.wandb_project, entity=cfg.wandb_entity,
+        tags=[cfg.arch], project=cfg.wandb_project, entity=cfg.wandb_entity,
     )
     stamp(f"tracking: {tracker.run.url if tracker.active else 'off'}; training {len(loader)} steps per epoch", t_start)
     best, log = -1.0, []

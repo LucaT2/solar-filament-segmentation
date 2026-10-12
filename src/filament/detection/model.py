@@ -1,6 +1,7 @@
-"""Mask R-CNN (torchvision) set up for 1-channel, full-resolution solar images.
+"""Mask R-CNN and Cascade Mask R-CNN (torchvision) set up for 1-channel, full-resolution solar images.
 
-* COCO-pretrained ResNet50-FPN v2, with the box and mask heads replaced for 2 classes (background, filament).
+* COCO-pretrained ResNet50-FPN v2, with the box and mask heads replaced for 2 classes (background, filament);
+  optionally with cascade box heads (``arch="cascade"``).
 * Images are already normalized per image (``filament.segmentation.dataset.normalize_with``) and repeated to 3
   channels, so torchvision's own normalization is switched off (mean 0, std 1).
 * torchvision resizes every image to ``min_size`` (800 px by default), which would blur 8 px filaments away. The input
@@ -17,7 +18,9 @@ from filament.detection.instances import Instances
 
 
 def build_maskrcnn(pretrained: bool = True, trainable_layers: int = 3, detections_per_img: int = 100,
-                   score_thresh: float = 0.01, mask_size: int = 28, size: int = 1024) -> nn.Module:
+                   score_thresh: float = 0.01, mask_size: int = 28, size: int = 1024,
+                   arch: str = "maskrcnn") -> nn.Module:
+    """``arch``: "maskrcnn" (one box stage) or "cascade" (three box stages, ``filament.detection.cascade``)."""
     from torchvision.models.detection import MaskRCNN_ResNet50_FPN_V2_Weights, maskrcnn_resnet50_fpn_v2
     from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
     from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
@@ -40,6 +43,12 @@ def build_maskrcnn(pretrained: bool = True, trainable_layers: int = 3, detection
         from torchvision.ops import MultiScaleRoIAlign
 
         model.roi_heads.mask_roi_pool = MultiScaleRoIAlign(["0", "1", "2", "3"], mask_size // 2, sampling_ratio=2)
+    if arch == "cascade":
+        from filament.detection.cascade import CascadeRoIHeads
+
+        model.roi_heads = CascadeRoIHeads(model.roi_heads)
+    elif arch != "maskrcnn":
+        raise ValueError(f"unknown detection arch {arch!r}")
     return model
 
 

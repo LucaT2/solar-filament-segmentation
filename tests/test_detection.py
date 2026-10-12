@@ -135,6 +135,67 @@ def test_guide_map_stays_aligned_with_the_instances(ann, ai, tmp_path):
     assert full.shape == (3, 2048, 2048) and (full[1] > 0).sum() == union.sum()
 
 
+@pytest.fixture(scope="module")
+def cascade_model():
+    from filament.detection.model import build_maskrcnn
+
+    torch.manual_seed(0)
+    return build_maskrcnn(pretrained=False, size=256, mask_size=56, arch="cascade")
+
+
+def _one_filament_target():
+    masks = torch.zeros(1, 256, 256, dtype=torch.uint8)
+    masks[0, 100:120, 40:200] = 1
+    return {"boxes": torch.tensor([[40.0, 100.0, 200.0, 120.0]]), "labels": torch.ones(1, dtype=torch.int64),
+            "masks": masks}
+
+
+def test_cascade_trains_every_stage(cascade_model):
+    from filament.detection.model import set_input_size
+
+    model = cascade_model
+    model.train()
+    set_input_size(model, 256)
+    losses = model([torch.randn(3, 256, 256), torch.randn(3, 256, 256)],
+                   [_one_filament_target(), {"boxes": torch.zeros(0, 4), "labels": torch.zeros(0, dtype=torch.int64),
+                                             "masks": torch.zeros(0, 256, 256, dtype=torch.uint8)}])
+    stages = model.roi_heads.num_stages
+    assert stages == 3
+    assert {f"loss_classifier_s{t}" for t in range(stages)} | {f"loss_box_reg_s{t}" for t in range(stages)} | \
+        {"loss_mask", "loss_objectness", "loss_rpn_box_reg"} <= set(losses)
+    assert all(torch.isfinite(v) for v in losses.values())
+    model.zero_grad()
+    sum(losses.values()).backward()
+    for t in range(stages):  # every stage's head and predictor receives gradient
+        assert any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.roi_heads.box_predictors[t].parameters())
+        assert any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.roi_heads.box_heads[t].parameters())
+
+
+def test_cascade_stages_label_with_stricter_iou(cascade_model):
+    heads = cascade_model.roi_heads
+    gt = [torch.tensor([[0.0, 0.0, 100.0, 100.0]])]
+    # proposals with IoU 1.0, 0.64 and 0.55 with the ground-truth box
+    props = [torch.tensor([[0.0, 0.0, 100.0, 100.0], [0.0, 0.0, 100.0, 64.0], [0.0, 0.0, 100.0, 55.0]])]
+    labels = [heads._label(t, props, gt, [torch.ones(1, dtype=torch.int64)])[0][0].tolist() for t in range(3)]
+    assert labels == [[1, 1, 1], [1, 1, 0], [1, 0, 0]]  # thresholds 0.5, 0.6, 0.7
+
+
+def test_cascade_zero_regression_keeps_boxes(cascade_model):
+    heads = cascade_model.roi_heads
+    props = [torch.tensor([[10.0, 20.0, 60.0, 90.0]])]
+    refined = heads._refine(1, torch.zeros(1, 8), props, [(256, 256)])
+    torch.testing.assert_close(refined[0], props[0])
+
+
+def test_cascade_predicts_raw_instances(cascade_model):
+    from filament.detection.model import predict_instances
+
+    inst = predict_instances(cascade_model, np.random.default_rng(0).normal(size=(256, 256)).astype(np.float32),
+                             torch.device("cpu"))
+    assert inst.boxes.shape == (len(inst), 4) and inst.masks.shape[1:] == (56, 56)
+    assert ((inst.scores >= 0) & (inst.scores <= 1)).all()
+
+
 def test_maskrcnn_trains_and_predicts_raw_instances():
     from filament.detection.model import build_maskrcnn, predict_instances, set_input_size
 

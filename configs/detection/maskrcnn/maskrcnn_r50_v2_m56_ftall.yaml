@@ -1,0 +1,32 @@
+# Mask R-CNN with the whole backbone trained. As maskrcnn_r50_v2_m56, but:
+# * all of ResNet50 trained (trainable_layers 5; the first run froze conv1 + layer1) at a quarter of the learning
+#   rate of the FPN and the heads (discriminative learning rates, as for the U-Net encoders)
+# * batch 6 with lr 1.5e-4 (linear scaling from batch 4 / 1e-4; batch 8 does not fit the cascade on a T4), 2 warm-up
+#   epochs (~670 steps), 32 epochs (the 16-epoch
+#   run was still improving; validation every 2 epochs also shows epochs 16 and 24)
+# ~9.1 GiB at batch 6 (measured 1.5 GiB per image).
+name: maskrcnn_r50_v2_m56_ftall
+arch: maskrcnn
+pretrained: true
+trainable_layers: 5
+backbone_lr_mult: 0.25
+mask_size: 56
+detections_per_img: 100
+crop: 1024
+batch_size: 6
+epochs: 32
+samples_per_epoch: 2000
+pos_fraction: 0.8
+min_instance_area: 30
+augment: base
+lr: 1.5e-4
+weight_decay: 1.0e-4
+warmup_epochs: 2
+grad_clip: 10.0
+amp: fp16
+num_workers: 4
+val_every: 2
+val_mask_threshold: 0.5
+val_score_thresholds: [0.3, 0.5, 0.7]
+val_min_area: 100
+seed: 42

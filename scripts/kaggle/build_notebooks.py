@@ -316,12 +316,13 @@ nbf.write(nbf.v4.new_notebook(cells=cells, metadata=META), REPO_ROOT / "notebook
 # Second notebook for a parallel session (Kaggle allows 2 GPU sessions at once): same code, different experiments.
 SCREEN_CONFIG = '''
 # ---- configuration ---------------------------------------------------------------------------------------
-# Mask R-CNN (ResNet50-FPN v2, 56 x 56 masks, batch 8), fold 0, 32 epochs, one per GPU:
-# the current setup trained longer (the 16-epoch run was still improving), and the same with the whole backbone
-# trained at a quarter of the learning rate. Each run's log also shows its validation PQ at epochs 16 and 24.
+# Fold 0, 32 epochs, one per GPU, identical settings except the box heads (whole ResNet50 backbone at lr x 0.25,
+# batch 6, 2 warm-up epochs, 56 x 56 masks):
+# Mask R-CNN (one box stage) and Cascade Mask R-CNN (three box stages at IoU 0.5 / 0.6 / 0.7).
+# Each run's log also shows its validation PQ at epochs 16 and 24.
 EXPERIMENTS = [
-    {"config": "configs/detection/maskrcnn_r50_v2_m56.yaml",       "folds": [0], "full_seeds": [], "overrides": []},
-    {"config": "configs/detection/maskrcnn_r50_v2_m56_ftall.yaml", "folds": [0], "full_seeds": [], "overrides": []},
+    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m56_ftall.yaml", "folds": [0], "full_seeds": [], "overrides": []},
+    {"config": "configs/detection/cascade/cascade_r50_v2_m56_ftall.yaml",   "folds": [0], "full_seeds": [], "overrides": []},
 ]
 # attached inputs, matched by "<notebook>/<experiment>" in their path: this notebook's previous output
 # (Add Input -> Your Work -> Notebooks -> this notebook), which holds ConvNeXt-Tiny + U-Net fold 0 and its OOF maps
@@ -329,8 +330,8 @@ CHECKPOINT_DATASETS = ["solar-filament-v2/unet_convnext_t_skel050"]
 BASELINE = "unet_convnext_t_skel050"   # best single fold-0 U-Net (the 16-epoch Mask R-CNN is compared locally)
 TTA = True                             # U-Net only: average 4 flips per model when predicting
 SUBMISSIONS = {                        # output name -> (experiment, [model names / glob patterns])
-    "maskrcnn_m56_e32_fold0": ("maskrcnn_r50_v2_m56", ["fold0"]),
     "maskrcnn_m56_ftall_fold0": ("maskrcnn_r50_v2_m56_ftall", ["fold0"]),
+    "cascade_m56_ftall_fold0": ("cascade_r50_v2_m56_ftall", ["fold0"]),
 }
 GITHUB_SECRET = "Github_key"           # label of the Kaggle secret holding the GitHub token
 WANDB_SECRET = "WANDB_API_KEY"         # label of the (optional) Kaggle secret holding the W&B API key
