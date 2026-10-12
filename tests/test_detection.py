@@ -53,6 +53,15 @@ def test_region_restricts_instances():
     assert comps.n == 1 and not (comps.labels[:, 64:] > 0).any()
 
 
+def test_instances_render_as_score_weighted_probability_map():
+    from filament.detection.instances import to_prob_map
+
+    prob = to_prob_map(box_instance([[10, 10, 60, 60], [40, 40, 100, 100]], [0.9, 0.6]), shape=(128, 128))
+    assert prob.max() == pytest.approx(0.9, abs=0.01)  # the stronger detection wins where they overlap
+    assert prob[80, 80] == pytest.approx(0.6, abs=0.01) and prob[120, 5] == 0
+    assert to_prob_map(Instances.empty(), shape=(64, 64)).sum() == 0
+
+
 def test_saved_instances_load_through_the_shared_loader(tmp_path):
     inst = box_instance([[10, 10, 60, 60], [80, 80, 120, 120]], [0.9, 0.4])
     save_instances(tmp_path, "img", inst)

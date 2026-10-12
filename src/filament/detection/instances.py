@@ -70,6 +70,30 @@ def paste_mask(mask: np.ndarray, box: np.ndarray, threshold: float, shape: tuple
     return y0 + top, x0 + left, patch
 
 
+def to_prob_map(inst: Instances, shape: tuple[int, int] = (2048, 2048), min_score: float = 0.05) -> np.ndarray:
+    """A probability map from detections: each soft mask resized into its box and weighted by the detection score;
+    the maximum where detections overlap. Lets instance models join probability-map ensembles."""
+    out = np.zeros(shape, np.float32)
+    m = inst.masks.shape[-1] if len(inst) else 28
+    for box, score, mask in zip(inst.boxes, inst.scores, inst.masks):
+        if score < min_score:
+            continue
+        padded = np.pad(mask.astype(np.float32), 1)
+        scale = (m + 2) / m
+        cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+        hw, hh = (box[2] - box[0]) / 2 * scale, (box[3] - box[1]) / 2 * scale
+        x0, y0, x1, y1 = int(cx - hw), int(cy - hh), int(cx + hw), int(cy + hh)
+        w, h = max(x1 - x0 + 1, 1), max(y1 - y0 + 1, 1)
+        soft = cv2.resize(padded, (w, h), interpolation=cv2.INTER_LINEAR) * float(score)
+        ty, tx = max(-y0, 0), max(-x0, 0)
+        by, bx = max(y0 + h - shape[0], 0), max(x0 + w - shape[1], 0)
+        soft = soft[ty: h - by, tx: w - bx]
+        if soft.size:
+            sl = (slice(y0 + ty, y0 + ty + soft.shape[0]), slice(x0 + tx, x0 + tx + soft.shape[1]))
+            np.maximum(out[sl], soft, out=out[sl])
+    return out
+
+
 def to_components(inst: Instances, threshold: float, region: np.ndarray | None = None,
                   shape: tuple[int, int] = (2048, 2048), max_overlap: float = 0.5) -> Components:
     """Non-overlapping instances as a component label map; ``mean_prob`` holds each instance's detection score."""
