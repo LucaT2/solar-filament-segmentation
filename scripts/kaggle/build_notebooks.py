@@ -69,6 +69,19 @@ T0 = time.time()
 def log(msg):   # timestamped progress, so a stalled step is easy to spot in the log
     print(f"[{time.strftime('%H:%M:%S')} +{time.time() - T0:5.0f}s] {msg}", flush=True)
 
+log("session started")
+# no step may wait for input: git never asks for a password (a rejected token fails instead of hanging)
+os.environ["GIT_TERMINAL_PROMPT"] = "0"
+
+def run(cmd, timeout, what):
+    \"\"\"Run a setup command; fail loudly (instead of hanging) after ``timeout`` seconds.\"\"\"
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"{what} did not finish within {timeout} s (network problem?)") from None
+    return res
+
+log("reading secrets")
 from kaggle_secrets import UserSecretsClient
 secrets = UserSecretsClient()
 # less GPU-memory fragmentation between training and full-image validation (inherited by all subprocesses)
@@ -102,9 +115,10 @@ if REPO_DATASET:
     shutil.copytree(find_input(REPO_DATASET, "pyproject.toml"), REPO, dirs_exist_ok=True)
 elif not REPO.exists():
     token = github_token()
+    log("GitHub token read; cloning the repository")
     # token as the password (required for fine-grained tokens; also works for classic ones)
-    res = subprocess.run(["git", "clone", "--depth", "1", "-b", REPO_BRANCH,
-                          f"https://x-access-token:{token}@{REPO_URL}", str(REPO)], capture_output=True, text=True)
+    res = run(["git", "clone", "--depth", "1", "-b", REPO_BRANCH,
+               f"https://x-access-token:{token}@{REPO_URL}", str(REPO)], 120, "git clone")
     if res.returncode != 0:   # token never printed
         raise RuntimeError(
             "git clone failed: " + res.stderr.replace(token, "***") +
@@ -115,8 +129,13 @@ log("repo: " + subprocess.run(["git", "-C", str(REPO), "log", "--oneline", "-1"]
 code("""
 # Kaggle images ship torch, numpy, pandas, opencv, scikit-image, scikit-learn, timm and wandb. Install only what is
 # missing, pinned to the versions tested locally (requirements.txt), without touching the preinstalled stack.
-!pip install -q --no-deps segmentation-models-pytorch==0.5.0 albumentations==2.0.8 albucore==0.0.24 pycocotools
-!pip install -q --no-deps -e {REPO}
+log("installing packages")
+for cmd in ([sys.executable, "-m", "pip", "install", "-q", "--no-deps", "segmentation-models-pytorch==0.5.0",
+             "albumentations==2.0.8", "albucore==0.0.24", "pycocotools"],
+            [sys.executable, "-m", "pip", "install", "-q", "--no-deps", "-e", str(REPO)]):
+    res = run(cmd, 300, "pip install")
+    if res.returncode != 0:
+        raise RuntimeError("pip install failed:\\n" + res.stderr[-2000:])
 sys.path.insert(0, str(REPO / "src"))
 os.chdir(REPO)
 
@@ -211,8 +230,10 @@ for gpu in range(n_gpu):
 import time
 POLL_S, STALL_S = 120, 1200
 last_change = {gpu: (time.time(), 0) for _, _, gpu in procs}
+first = True
 while any(p.poll() is None for p, _, _ in procs):
-    time.sleep(POLL_S)
+    time.sleep(30 if first else POLL_S)   # a first sign of life soon, then every POLL_S
+    first = False
     for p, _, gpu in procs:
         path = WORK / f"train_gpu{gpu}.log"
         size = path.stat().st_size
