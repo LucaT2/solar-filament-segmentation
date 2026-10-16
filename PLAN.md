@@ -191,6 +191,48 @@ Cut-off for new architectures: ~Oct 29; then final ensemble, report, repo, form 
 - [ ] Cheap extras along the way: classifier features (fragment, probability spread, texture) + lower size filter,
       `pos_fraction` 0.5, disk-distance input channel, 8-way TTA, multi-scale TTA.
 
+## Stage 5b — Roadmap after the Mask R-CNN screens (agreed 2026-10-16)
+*Where we stand: every approach converges to ~0.45 honest fold-0 PQ (U-Net ensemble + classifier 0.445–0.451,
+Mask R-CNN 0.442 → 0.446 with the whole backbone; combinations ≤ +0.005). Annotators agree at only ~0.34 (SQ 0.634),
+so more gain must come from new information (data) or from aligning decisions with the metric, not from mixing
+models trained on the same 707 images. Kaggle quota is the bottleneck (30 h/week); the public LB (2 decimals,
+~90 images) cannot show gains this size — local paired comparisons decide.*
+
+**A. Data (new information)**
+- [ ] **A1 — Neighbouring GONG frames as training data (top priority).** ~4 frames per training image (±2, ±5 min,
+      same site) from gong2.nso.edu, aligned onto the training image's disk, trained with the same masks; inference
+      stays single-image. Host ruling: allowed for training, never at inference (see forum). Feasibility checked
+      2026-10-12: same image product on the disk (corr 0.994, fit 0.999·x + 0.6, residual 2.65 grey levels = JPEG),
+      disk centre/radius within 1 px, a frame every minute; off-disk background differs (23.6 vs 17.3) → use the
+      training image's off-disk area. Exclude frames within 30 min of any test image.
+- [ ] A2 — Semi-supervised: pseudo-labels on unlabelled GONG images (allowed per the quoted clarification); after A1.
+- [ ] A3 — Copy-paste augmentation of real filaments (Ghiasi et al. 2021).
+- [ ] A4 — Consensus-aware detector targets (share of annotators who drew a filament); low odds (U-Net consensus
+      targets gave no gain).
+- [x] Spines: named on the rules page as "additional annotations" next to "may not use any other ground-truth
+      metadata for training" → treated as forbidden; masks-derived skeletons are fine.
+
+**B. Heads and losses on Mask R-CNN**
+- [ ] **B1 — Cascade Mask R-CNN** (implemented, `filament.detection.cascade`); re-run at batch 4 after the OOM.
+- [ ] B2 — Mask Scoring head (score × predicted mask IoU): ranks detections by mask quality, as PQ rewards.
+- [ ] B3 — Dice / boundary-weighted loss in the mask head (outlines; limited: our SQ 0.676 > human-vs-human 0.634).
+- [ ] B4 — Boundary branch (BMask R-CNN) / PointRend: outlines and fine structures; small expected gain.
+
+**C. New architectures (parked)**
+- C1 Mask2Former: 1/4-resolution masks vs 8 px filaments, slow convergence, ~2 days → parked.
+- C2 Bigger detector backbones (ResNeXt-101 / Swin): need detectron2 / MMDetection for COCO weights.
+- C3 U-Net variants (Lovász, disk-distance channel, multi-scale TTA): saturated, ±0.005.
+
+**D. Inference / combination (for the final submission)**
+- [ ] D1 — TTA for Mask R-CNN (flips/rotations, instance-level merge).
+- [ ] D2 — Several fold models of the best detector, merged.
+- [ ] D3 — Map averaging with the U-Net ensemble + classifier (≤ +0.005 measured).
+- [ ] D4 — Explicit pixel-overlap check in `validate_submission` (pipeline is overlap-free by construction; verified
+      0 overlapping pixels in the submitted files).
+
+**Order:** A1 tooling + D4 now (no GPU) → next session: Mask R-CNN whole backbone + A1 vs 0.446, and B1 → B2/B3 on
+the winner → A2 if headroom → from ~Oct 29: 5 folds of the winner, D1–D3, report (deadline Nov 15).
+
 ## Stage 5 — Main approach: precise, connected, consensus segmentation
 *Priorities from Stage 4: (1) component rescoring on all-fold OOF, (2) large and chained filaments: bigger
 crops, Skeleton Recall, longer training, (3) 5-fold ensemble. Outline width and linking need no work.*
