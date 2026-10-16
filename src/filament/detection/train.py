@@ -46,6 +46,7 @@ class DetTrainConfig:
     trainable_layers: int = 3  # ResNet stages fine-tuned (0-5); the rest stay frozen (5 = whole backbone)
     backbone_lr_mult: float = 1.0  # backbone learning rate = lr * this (the FPN and the heads use lr)
     mask_size: int = 28  # mask head output (28 = torchvision default; 56 = finer, more memory)
+    mask_dice_weight: float = 0.0  # mask loss = BCE + this x soft Dice per instance (0 = torchvision's BCE only)
     guide: str | None = None  # segmentation experiment whose probability maps become the 2nd input channel
     # (its oof/ maps for training images; OOF, so no image's guide comes from a model that saw its labels)
     guide_test_maps: str = "test"  # the guide's folder with test maps. Training sees single-model OOF maps, so
@@ -91,7 +92,7 @@ def build_from_config(cfg: dict | DetTrainConfig, pretrained: bool | None = None
     c = cfg if isinstance(cfg, dict) else asdict(cfg)
     return build_maskrcnn(c["pretrained"] if pretrained is None else pretrained, c["trainable_layers"],
                           c["detections_per_img"], mask_size=c["mask_size"], size=c["crop"],
-                          arch=c.get("arch", "maskrcnn"))
+                          arch=c.get("arch", "maskrcnn"), mask_dice_weight=c.get("mask_dice_weight", 0.0))
 
 
 def guide_dir(cfg: dict | DetTrainConfig, split: str) -> Path | None:

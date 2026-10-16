@@ -1,0 +1,29 @@
+# As maskrcnn_r50_v2_m56_ftall (whole backbone at lr x 0.25, batch 6 / lr 1.5e-4, 2 warm-up epochs, 56 px masks), with
+# one change: the mask head is trained with BCE + 1.0 x soft Dice per instance (filament.detection.losses) instead of
+# BCE alone. Dice weighs a filament's thin parts like its bulk and is closer to the IoU that PQ rewards.
+name: maskrcnn_r50_v2_m56_ftall_dice
+arch: maskrcnn
+pretrained: true
+trainable_layers: 5
+backbone_lr_mult: 0.25
+mask_size: 56
+mask_dice_weight: 1.0
+detections_per_img: 100
+crop: 1024
+batch_size: 6
+epochs: 32
+samples_per_epoch: 2000
+pos_fraction: 0.8
+min_instance_area: 30
+augment: base
+lr: 1.5e-4
+weight_decay: 1.0e-4
+warmup_epochs: 2
+grad_clip: 10.0
+amp: fp16
+num_workers: 4
+val_every: 2
+val_mask_threshold: 0.5
+val_score_thresholds: [0.3, 0.5, 0.7]
+val_min_area: 100
+seed: 42

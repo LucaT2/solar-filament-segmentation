@@ -196,6 +196,38 @@ def test_cascade_predicts_raw_instances(cascade_model):
     assert ((inst.scores >= 0) & (inst.scores <= 1)).all()
 
 
+def test_soft_dice_loss():
+    from filament.detection.losses import soft_dice_loss
+
+    t = torch.zeros(2, 8, 8)
+    t[:, 2:6, 2:6] = 1
+    perfect = torch.where(t > 0, 20.0, -20.0)
+    assert soft_dice_loss(perfect, t).item() == pytest.approx(0.0, abs=1e-3)
+    assert soft_dice_loss(-perfect, t).item() > 0.9  # everything wrong
+
+
+def test_dice_mask_loss_adds_to_bce_and_restores_torchvision():
+    from torchvision.models.detection import roi_heads as tv_roi_heads
+
+    from filament.detection.losses import DiceMaskRoIHeads
+    from filament.detection.model import build_maskrcnn, set_input_size
+
+    original = tv_roi_heads.maskrcnn_loss
+    losses = {}
+    for w in (0.0, 1.0):
+        torch.manual_seed(0)
+        model = build_maskrcnn(pretrained=False, size=256, mask_size=56, mask_dice_weight=w)
+        assert isinstance(model.roi_heads, DiceMaskRoIHeads) == (w > 0)
+        model.train()
+        set_input_size(model, 256)
+        torch.manual_seed(1)
+        losses[w] = model([torch.randn(3, 256, 256)], [_one_filament_target()])
+    # identical model and data: the box losses agree, the mask loss grows by the Dice term
+    assert losses[1.0]["loss_classifier"].item() == pytest.approx(losses[0.0]["loss_classifier"].item(), rel=1e-4)
+    assert losses[1.0]["loss_mask"].item() > losses[0.0]["loss_mask"].item() + 0.1
+    assert tv_roi_heads.maskrcnn_loss is original  # torchvision's function is restored after the forward pass
+
+
 def test_maskrcnn_trains_and_predicts_raw_instances():
     from filament.detection.model import build_maskrcnn, predict_instances, set_input_size
 

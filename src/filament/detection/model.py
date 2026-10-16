@@ -19,8 +19,9 @@ from filament.detection.instances import Instances
 
 def build_maskrcnn(pretrained: bool = True, trainable_layers: int = 3, detections_per_img: int = 100,
                    score_thresh: float = 0.01, mask_size: int = 28, size: int = 1024,
-                   arch: str = "maskrcnn") -> nn.Module:
-    """``arch``: "maskrcnn" (one box stage) or "cascade" (three box stages, ``filament.detection.cascade``)."""
+                   arch: str = "maskrcnn", mask_dice_weight: float = 0.0) -> nn.Module:
+    """``arch``: "maskrcnn" (one box stage) or "cascade" (three box stages, ``filament.detection.cascade``).
+    ``mask_dice_weight`` > 0 adds a soft Dice term to the mask loss (``filament.detection.losses``)."""
     from torchvision.models.detection import MaskRCNN_ResNet50_FPN_V2_Weights, maskrcnn_resnet50_fpn_v2
     from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
     from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
@@ -46,9 +47,13 @@ def build_maskrcnn(pretrained: bool = True, trainable_layers: int = 3, detection
     if arch == "cascade":
         from filament.detection.cascade import CascadeRoIHeads
 
-        model.roi_heads = CascadeRoIHeads(model.roi_heads)
+        model.roi_heads = CascadeRoIHeads(model.roi_heads, dice_weight=mask_dice_weight)
     elif arch != "maskrcnn":
         raise ValueError(f"unknown detection arch {arch!r}")
+    elif mask_dice_weight > 0:
+        from filament.detection.losses import use_dice_mask_loss
+
+        use_dice_mask_loss(model.roi_heads, mask_dice_weight)
     return model
 
 

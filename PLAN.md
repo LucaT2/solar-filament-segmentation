@@ -216,6 +216,8 @@ models trained on the same 707 images. Kaggle quota is the bottleneck (30 h/week
 - [ ] **B1 — Cascade Mask R-CNN** (implemented, `filament.detection.cascade`); re-run at batch 4 after the OOM.
 - [ ] B2 — Mask Scoring head (score × predicted mask IoU): ranks detections by mask quality, as PQ rewards.
 - [ ] B3 — Dice / boundary-weighted loss in the mask head (outlines; limited: our SQ 0.676 > human-vs-human 0.634).
+      *Implemented 2026-10-16* (`filament.detection.losses`, `mask_dice_weight`); queued with B1: both 20 epochs,
+      `max_hours` 3.8, fold 0, vs the whole-backbone Mask R-CNN (0.446 at 32 epochs; its epoch-20 validation 0.428).
 - [ ] B4 — Boundary branch (BMask R-CNN) / PointRend: outlines and fine structures; small expected gain.
 
 **C. New architectures (parked)**

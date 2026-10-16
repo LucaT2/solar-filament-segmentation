@@ -21,8 +21,10 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torchvision.models.detection import _utils as det_utils
-from torchvision.models.detection.roi_heads import RoIHeads, fastrcnn_loss, maskrcnn_inference, maskrcnn_loss
+from torchvision.models.detection.roi_heads import RoIHeads, fastrcnn_loss, maskrcnn_inference
 from torchvision.ops import boxes as box_ops
+
+from filament.detection.losses import mask_loss
 
 IOUS = (0.5, 0.6, 0.7)
 REG_WEIGHTS = ((10.0, 10.0, 5.0, 5.0), (20.0, 20.0, 10.0, 10.0), (30.0, 30.0, 15.0, 15.0))
@@ -30,7 +32,8 @@ STAGE_WEIGHTS = (1.0, 0.5, 0.25)
 
 
 class CascadeRoIHeads(RoIHeads):
-    def __init__(self, base: RoIHeads, ious=IOUS, reg_weights=REG_WEIGHTS, stage_weights=STAGE_WEIGHTS):
+    def __init__(self, base: RoIHeads, ious=IOUS, reg_weights=REG_WEIGHTS, stage_weights=STAGE_WEIGHTS,
+                 dice_weight: float = 0.0):
         super().__init__(
             box_roi_pool=base.box_roi_pool, box_head=base.box_head, box_predictor=base.box_predictor,
             fg_iou_thresh=ious[0], bg_iou_thresh=ious[0],
@@ -52,6 +55,7 @@ class CascadeRoIHeads(RoIHeads):
         self.matchers = [det_utils.Matcher(t, t, allow_low_quality_matches=False) for t in ious]
         self.coders = [det_utils.BoxCoder(w) for w in reg_weights]
         self.stage_weights = tuple(stage_weights)
+        self.dice_weight = dice_weight  # optional Dice term in the mask loss (filament.detection.losses)
 
     @property
     def num_stages(self) -> int:
@@ -104,8 +108,8 @@ class CascadeRoIHeads(RoIHeads):
                 if t < self.num_stages - 1:
                     refined = self._refine(t, deltas, proposals, image_shapes)
             mask_logits = self.mask_predictor(self.mask_head(self.mask_roi_pool(features, mask_props, image_shapes)))
-            losses["loss_mask"] = maskrcnn_loss(mask_logits, mask_props, [t["masks"] for t in targets], gt_labels,
-                                                mask_idxs)
+            losses["loss_mask"] = mask_loss(mask_logits, mask_props, [t["masks"] for t in targets], gt_labels,
+                                            mask_idxs, dice_weight=self.dice_weight)
             return [], losses
 
         # inference: run every stage on the previous stage's boxes, average the class probabilities
