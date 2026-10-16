@@ -32,5 +32,22 @@ def test_frames_near_test_images_are_excluded():
     assert [n.offset_min for n in got] == [-5, -2, 2, -8]
 
 
+def test_alignment_is_an_exact_whole_pixel_shift():
+    import numpy as np
+
+    from filament.data.images import Disk
+    from filament.data.neighbours import align_to, frame_quality
+
+    rng = np.random.default_rng(0)
+    train = rng.integers(60, 200, (256, 256)).astype(np.uint8)
+    frame = np.roll(train, (3, -2), axis=(0, 1))  # the same scene, disk moved by (+3, -2) px
+    tdisk, fdisk = Disk(128.0, 128.0, 100.0), Disk(126.0, 131.0, 100.0)
+    aligned = align_to(frame, train, fdisk, tdisk)
+    inner = np.s_[40:216, 40:216]
+    assert np.array_equal(aligned[inner], train[inner])  # pixels copied, not interpolated
+    q = frame_quality(aligned, train, tdisk)
+    assert q["corr"] > 0.999 and abs(q["sharp_ratio"] - 1) < 0.05
+
+
 def test_archive_url():
     assert frame_url("20140609195854Bh") == "https://gong2.nso.edu/HA/hag/201406/20140609/20140609195854Bh.jpg"

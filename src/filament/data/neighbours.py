@@ -18,6 +18,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import cv2
+import numpy as np
+
+from filament.data.images import Disk, disk_mask
+
 ARCHIVE = "https://gong2.nso.edu/HA/hag"
 FRAME = re.compile(r"(\d{14})([A-Z])h\.jpg")
 USER_AGENT = "solar-filament-research (Kaggle filament-segmentation-2026; training data)"
@@ -94,6 +99,44 @@ def pick_neighbours(train_stem: str, frames: list[str], offsets=(-5, -2, 2, 5), 
         used.add(best[0])
         out.append(Neighbour(train_stem, best[0], round(best[1], 2)))
     return out
+
+
+def align_to(frame: np.ndarray, train: np.ndarray, frame_disk: Disk, train_disk: Disk,
+             max_scale_error: float = 0.002) -> np.ndarray:
+    """``frame`` moved so its solar disk coincides with ``train``'s; outside the disk, ``train``'s pixels (the
+    competition files are post-processed off the disk, the archive frames are not).
+
+    Any interpolation blurs the pixel-scale texture (a half-pixel bilinear shift keeps ~20% of the Laplacian energy),
+    so frames are shifted by whole pixels, an exact copy, and only rescaled (Lanczos) if the disk size differs by more
+    than ``max_scale_error``. The remaining misalignment is < 1 px.
+    """
+    s = train_disk.radius / frame_disk.radius
+    if abs(s - 1) <= max_scale_error:
+        dx, dy = round(train_disk.cx - frame_disk.cx), round(train_disk.cy - frame_disk.cy)
+        m, flags = np.float32([[1, 0, dx], [0, 1, dy]]), cv2.INTER_NEAREST
+    else:
+        m = np.float32([[s, 0, train_disk.cx - s * frame_disk.cx], [0, s, train_disk.cy - s * frame_disk.cy]])
+        flags = cv2.INTER_LANCZOS4
+    out = cv2.warpAffine(frame, m, (train.shape[1], train.shape[0]), flags=flags,
+                         borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+    on = disk_mask(train.shape, train_disk, 1.0)
+    out[~on] = train[~on]
+    return out
+
+
+def frame_quality(aligned: np.ndarray, train: np.ndarray, train_disk: Disk, smooth: float = 3.0) -> dict:
+    """How closely an aligned neighbour matches its training image on the disk (inner 95% of the radius).
+
+    ``corr`` compares the images smoothed with a ``smooth``-px Gaussian: it checks that filament-scale structures
+    coincide and ignores the pixel-scale granulation that seeing changes from frame to frame (exactly the variation
+    the neighbours are meant to add). ``corr_raw`` is the unsmoothed correlation, for reference.
+    """
+    on = disk_mask(train.shape, train_disk, 0.95)
+    a, b = aligned.astype(np.float32), train.astype(np.float32)
+    sa, sb = cv2.GaussianBlur(a, (0, 0), smooth), cv2.GaussianBlur(b, (0, 0), smooth)
+    sharp = lambda img: float(cv2.Laplacian(img, cv2.CV_32F)[on].var())
+    return {"corr": float(np.corrcoef(sa[on], sb[on])[0, 1]), "corr_raw": float(np.corrcoef(a[on], b[on])[0, 1]),
+            "mean_ratio": float(a[on].mean() / max(b[on].mean(), 1.0)), "sharp_ratio": sharp(a) / max(sharp(b), 1e-6)}
 
 
 def download_frame(stem: str, out_dir: Path, pause: float = 1.0) -> Path:
