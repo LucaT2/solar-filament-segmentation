@@ -150,7 +150,12 @@ def load_checkpoint_dataset(name):
     log(f"{name} -> {dst}: {sorted(p.name for p in dst.glob('*.pt'))} | prediction folders: {folders}")
     return exp
 
-loaded = [load_checkpoint_dataset(n) for n in CHECKPOINT_DATASETS]
+loaded = []
+for n in CHECKPOINT_DATASETS:   # a missing input only costs its comparison, not the whole run
+    try:
+        loaded.append(load_checkpoint_dataset(n))
+    except FileNotFoundError as exc:
+        log(f"WARNING: {exc}; continuing without it")
 for e in EXPERIMENTS:
     e["name"] = yaml.safe_load((REPO / e["config"]).read_text())["name"]
     # configs/detection/... -> instance model (Mask R-CNN), configs/segmentation/... -> probability-map model
@@ -321,7 +326,9 @@ SCREEN_CONFIG = '''
 # keeping its best model and OOF predictions:
 # * GPU 0: Cascade Mask R-CNN (three box stages), batch 4 / lr 1e-4 (batch 6 ran out of memory), 20 epochs
 # * GPU 1: Mask R-CNN with BCE + Dice in the mask loss, otherwise identical to the baseline, 20 epochs
-# Both are compared with the whole-backbone Mask R-CNN fold 0 loaded from the previous output (32 epochs).
+# Compared here with the ConvNeXt U-Net fold 0 (from the last successful version's output). The comparison with
+# the whole-backbone Mask R-CNN (0.446) is done locally: its run ended with ERROR status, and Kaggle only offers
+# outputs of successful versions as inputs.
 EXPERIMENTS = [
     {"config": "configs/detection/cascade/cascade_r50_v2_m56_ftall.yaml",        "folds": [0], "full_seeds": [],
      "overrides": ["epochs=20", "max_hours=3.8"]},
@@ -331,8 +338,8 @@ EXPERIMENTS = [
 # attached inputs, matched by "<notebook>/<experiment>" in their path: this notebook's previous output
 # (Add Input -> Your Work -> Notebooks -> this notebook), holding ConvNeXt-Tiny + U-Net fold 0 and the whole-backbone
 # Mask R-CNN fold 0 with their OOF predictions
-CHECKPOINT_DATASETS = ["solar-filament-v2/unet_convnext_t_skel050", "solar-filament-v2/maskrcnn_r50_v2_m56_ftall"]
-BASELINE = "maskrcnn_r50_v2_m56_ftall"  # both runs' direct comparison (same settings, plain Mask R-CNN)
+CHECKPOINT_DATASETS = ["solar-filament-v2/unet_convnext_t_skel050"]
+BASELINE = "unet_convnext_t_skel050"   # in-notebook reference; vs the whole-backbone Mask R-CNN: locally
 TTA = True                             # U-Net only: average 4 flips per model when predicting
 SUBMISSIONS = {                        # output name -> (experiment, [model names / glob patterns])
     "cascade_m56_ftall_fold0": ("cascade_r50_v2_m56_ftall", ["fold0"]),
