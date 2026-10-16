@@ -44,6 +44,36 @@ def normalize_with(img: np.ndarray, info: ImageInfo) -> np.ndarray:
     return (img.astype(np.float32) - info.mean) / max(info.std, 1.0)
 
 
+class NeighbourSampler:
+    """Swaps a training image for one of its aligned neighbouring GONG frames (``filament.data.neighbours``).
+
+    With probability ``p`` (if the image has neighbours) a random neighbour is returned instead of the image. The
+    neighbour is aligned to the training image's disk, so the training masks and disk apply unchanged; it gets its own
+    brightness statistics for normalization. Small per-worker cache, like the images themselves.
+    """
+
+    def __init__(self, neighbours: dict[str, list[Path]] | None, p: float = 0.5, cache_size: int = 16):
+        self.neighbours = neighbours or {}
+        self.p = p
+        self.cache_size = cache_size
+        self._cache: dict[Path, tuple[np.ndarray, ImageInfo]] = {}
+
+    def __call__(self, stem: str, img: np.ndarray, info: ImageInfo, rng: np.random.Generator):
+        frames = self.neighbours.get(stem)
+        if not frames or rng.random() >= self.p:
+            return img, info
+        path = frames[rng.integers(len(frames))]
+        if path not in self._cache:
+            if len(self._cache) >= self.cache_size:
+                self._cache.pop(next(iter(self._cache)))
+            frame = read_image(path)
+            yy, xx = np.ogrid[: frame.shape[0], : frame.shape[1]]
+            on = (xx - info.disk.cx) ** 2 + (yy - info.disk.cy) ** 2 < (0.95 * info.disk.radius) ** 2
+            vals = frame[on][::7].astype(np.float32)
+            self._cache[path] = (frame, ImageInfo(stem, path, info.disk, float(vals.mean()), float(vals.std())))
+        return self._cache[path]
+
+
 def build_augment(strength: str = "base") -> A.Compose:
     if strength == "none":
         return A.Compose([])
@@ -100,7 +130,10 @@ class CropDataset(Dataset):
         skeleton: bool = False,
         skel_radius: int = 2,
         target_mode: str = "random",
+        neighbours: dict[str, list[Path]] | None = None,
+        neighbour_p: float = 0.5,
     ):
+        self.swap = NeighbourSampler(neighbours, neighbour_p)  # real neighbouring frames, same labels
         if target_mode not in ("random", "consensus"):
             raise ValueError(f"unknown target_mode {target_mode!r}")
         self.skeleton = skeleton
@@ -155,7 +188,7 @@ class CropDataset(Dataset):
         else:
             unions, centers = item["unions"], np.concatenate(item["centers"])
         info = self.infos[item["stem"]]
-        img = self._image(item["stem"])
+        img, info = self.swap(item["stem"], self._image(item["stem"]), info, rng)
         cy, cx = self._center(rng, centers, info)
         h, w = img.shape
         y0 = int(np.clip(cy - self.crop // 2, 0, h - self.crop))

@@ -101,27 +101,37 @@ def pick_neighbours(train_stem: str, frames: list[str], offsets=(-5, -2, 2, 5), 
     return out
 
 
-def align_to(frame: np.ndarray, train: np.ndarray, frame_disk: Disk, train_disk: Disk,
-             max_scale_error: float = 0.002) -> np.ndarray:
-    """``frame`` moved so its solar disk coincides with ``train``'s; outside the disk, ``train``'s pixels (the
-    competition files are post-processed off the disk, the archive frames are not).
+def align_to(frame: np.ndarray, train: np.ndarray, train_disk: Disk, min_shift: int = 3) -> tuple[np.ndarray, tuple]:
+    """``frame`` on ``train``'s pixel grid, with ``train``'s pixels outside the disk (the competition files are
+    post-processed off the disk, the archive frames are not). Returns the frame and the shift applied (dy, dx).
 
-    Any interpolation blurs the pixel-scale texture (a half-pixel bilinear shift keeps ~20% of the Laplacian energy),
-    so frames are shifted by whole pixels, an exact copy, and only rescaled (Lanczos) if the disk size differs by more
-    than ``max_scale_error``. The remaining misalignment is < 1 px.
+    The archive frames are already co-registered by NSO: measured against the training masks they sit within ~1 px,
+    the same as the training image itself, while fitting and matching the disk edge introduced errors of up to 3 px.
+    So frames are used as they are, unless the image content (``content_shift``) shows a clear offset of at least
+    ``min_shift`` px; then they are moved by whole pixels (no interpolation, which would blur the fine texture).
     """
-    s = train_disk.radius / frame_disk.radius
-    if abs(s - 1) <= max_scale_error:
-        dx, dy = round(train_disk.cx - frame_disk.cx), round(train_disk.cy - frame_disk.cy)
-        m, flags = np.float32([[1, 0, dx], [0, 1, dy]]), cv2.INTER_NEAREST
+    dy, dx = content_shift(frame, train, train_disk)
+    out = frame.copy()
+    if max(abs(dy), abs(dx)) >= min_shift:
+        out = cv2.warpAffine(frame, np.float32([[1, 0, dx], [0, 1, dy]]), (train.shape[1], train.shape[0]),
+                             flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
     else:
-        m = np.float32([[s, 0, train_disk.cx - s * frame_disk.cx], [0, s, train_disk.cy - s * frame_disk.cy]])
-        flags = cv2.INTER_LANCZOS4
-    out = cv2.warpAffine(frame, m, (train.shape[1], train.shape[0]), flags=flags,
-                         borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+        dy, dx = 0, 0
     on = disk_mask(train.shape, train_disk, 1.0)
     out[~on] = train[~on]
-    return out
+    return out, (dy, dx)
+
+
+def content_shift(frame: np.ndarray, train: np.ndarray, train_disk: Disk, smooth: float = 2.0,
+                  max_shift: int = 20) -> tuple[int, int]:
+    """Whole-pixel (dy, dx) that moves ``frame`` onto ``train``, from phase correlation of the smoothed images on the
+    inner disk (filaments, plage and network); (0, 0) if the estimate is implausibly large."""
+    window = disk_mask(train.shape, train_disk, 0.9).astype(np.float32)
+    window = cv2.GaussianBlur(window, (0, 0), 20)  # soft edge: no artificial structure at the window border
+    prep = lambda img: (cv2.GaussianBlur(img.astype(np.float32), (0, 0), smooth) - float(img[window > 0.5].mean())) * window
+    (sx, sy), _ = cv2.phaseCorrelate(prep(frame), prep(train))
+    dy, dx = round(sy), round(sx)
+    return (dy, dx) if max(abs(dy), abs(dx)) <= max_shift else (0, 0)
 
 
 def frame_quality(aligned: np.ndarray, train: np.ndarray, train_disk: Disk, smooth: float = 3.0) -> dict:
@@ -137,6 +147,37 @@ def frame_quality(aligned: np.ndarray, train: np.ndarray, train_disk: Disk, smoo
     sharp = lambda img: float(cv2.Laplacian(img, cv2.CV_32F)[on].var())
     return {"corr": float(np.corrcoef(sa[on], sb[on])[0, 1]), "corr_raw": float(np.corrcoef(a[on], b[on])[0, 1]),
             "mean_ratio": float(a[on].mean() / max(b[on].mean(), 1.0)), "sharp_ratio": sharp(a) / max(sharp(b), 1e-6)}
+
+
+def find_neighbour_dir(name: str) -> Path:
+    """Folder with aligned neighbour frames and their ``manifest.csv``: a path, outputs/<name>/aligned, or (on
+    Kaggle) an attached dataset whose path contains ``name``."""
+    from filament.paths import KAGGLE_INPUT, REPO_ROOT, on_kaggle
+
+    for cand in (Path(name), REPO_ROOT / "outputs" / name / "aligned", REPO_ROOT / "outputs" / name):
+        if (cand / "manifest.csv").exists():
+            return cand
+    if on_kaggle():
+        hits = [p.parent for p in KAGGLE_INPUT.glob("**/manifest.csv") if name in str(p) and
+                next(p.parent.glob("*.jpeg"), None) is not None]
+        if hits:
+            return min(hits, key=lambda p: len(str(p)))
+    raise FileNotFoundError(f"no aligned neighbour frames (manifest.csv + *.jpeg) found for {name!r}")
+
+
+def load_neighbours(folder: Path) -> dict[str, list[Path]]:
+    """training stem -> its kept, aligned neighbour frames."""
+    import pandas as pd
+
+    folder = Path(folder)
+    table = pd.read_csv(folder / "manifest.csv")
+    table = table[table.keep.astype(bool)]
+    out: dict[str, list[Path]] = {}
+    for ts, stem in zip(table.train_stem, table.stem):
+        path = folder / f"{stem}.jpeg"
+        if path.exists():
+            out.setdefault(ts, []).append(path)
+    return out
 
 
 def download_frame(stem: str, out_dir: Path, pause: float = 1.0) -> Path:

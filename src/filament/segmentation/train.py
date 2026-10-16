@@ -57,6 +57,8 @@ class TrainConfig:
     skel_weight: float = 0.0  # Skeleton Recall loss weight (0 = off)
     skel_radius: int = 2  # thickness of the tubed skeleton (diamond dilation radius, px)
     target_mode: str = "random"  # random: one annotator's mask per sample | consensus: average of all annotators
+    neighbours: str | None = None  # aligned neighbouring GONG frames (filament.data.neighbours) used as training images
+    neighbour_p: float = 0.5  # probability that a training crop comes from a neighbour instead of the image itself
     decoder_fp32: bool = False  # run the decoder in float32 under mixed precision (fp16 overflow, e.g. MAnet)
     grad_clip: float = 0.0  # max gradient norm (0 = off)
     infer_tile: int | None = None  # full-image prediction in tiles of this size (None = one pass)
@@ -81,6 +83,20 @@ class TrainConfig:
                 raise KeyError(f"unknown config key {key!r}")
             data[key] = yaml.safe_load(value)
         return cls(**data)
+
+
+def load_training_neighbours(name: str | None, train_stems) -> dict | None:
+    """Aligned neighbour frames of the training images of this fold (never of its validation images)."""
+    if not name:
+        return None
+    from filament.data.neighbours import find_neighbour_dir, load_neighbours
+
+    folder = find_neighbour_dir(name)
+    keep = set(train_stems)
+    nb = {s: paths for s, paths in load_neighbours(folder).items() if s in keep}
+    print(f"neighbour frames: {sum(map(len, nb.values()))} for {len(nb)} of {len(keep)} training images ({folder})",
+          flush=True)
+    return nb
 
 
 def amp_dtype(name: str):
@@ -149,7 +165,8 @@ def run(cfg: TrainConfig, fold: int) -> dict:
 
     ds = CropDataset(ann, infos, train_stems, cfg.crop, cfg.samples_per_epoch, cfg.pos_fraction,
                      build_augment(cfg.augment), seed=cfg.seed + fold, skeleton=cfg.skel_weight > 0,
-                     skel_radius=cfg.skel_radius, target_mode=cfg.target_mode)
+                     skel_radius=cfg.skel_radius, target_mode=cfg.target_mode,
+                     neighbours=load_training_neighbours(cfg.neighbours, train_stems), neighbour_p=cfg.neighbour_p)
     loader = DataLoader(ds, batch_size=cfg.batch_size, shuffle=True, num_workers=cfg.num_workers,
                         pin_memory=True, drop_last=True, persistent_workers=cfg.num_workers > 0)
     gt = GroundTruth(ann, val_stems) if val_stems else None

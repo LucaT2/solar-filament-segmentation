@@ -1,7 +1,8 @@
 """Align downloaded neighbour frames onto their training images and check their quality.
 
 For each frame in outputs/neighbours/manifest.csv whose download exists (outputs/neighbours/raw/<stem>.jpg):
-* detect its solar disk, scale and shift it onto the training image's disk, copy the training image's off-disk area
+* keep it on the training image's pixel grid (archive frames are co-registered; a clear content offset of >= 3 px is
+  corrected by a whole-pixel shift), copy the training image's off-disk area
 * score it against the training image on the disk: correlation, brightness ratio, sharpness ratio, disk geometry
 * keep it if it looks like the same scene (thresholds below), save it as outputs/neighbours/aligned/<stem>.jpeg
 
@@ -48,14 +49,15 @@ def process(args) -> list[dict]:
         frame = read_image(raw)
         fdisk = find_disk(frame)
         shift, dr = float(np.hypot(fdisk.cx - tdisk.cx, fdisk.cy - tdisk.cy)), abs(fdisk.radius - tdisk.radius)
-        aligned = align_to(frame, train, fdisk, tdisk)
+        aligned, (sy, sx) = align_to(frame, train, tdisk)
         q = frame_quality(aligned, train, tdisk)
         reason = ("disk moved" if shift > max_shift else "disk size" if dr > max_dr
                   else "low correlation" if q["corr"] < min_corr
                   else "brightness" if not 0.7 <= q["mean_ratio"] <= 1.4 else "")
         if not reason:
             cv2.imwrite(str(OUT / "aligned" / f"{stem}.jpeg"), aligned, [cv2.IMWRITE_JPEG_QUALITY, 95])
-        out.append({**rec, **q, "shift_px": shift, "dr_px": dr, "keep": not reason, "reason": reason})
+        out.append({**rec, **q, "disk_shift_px": shift, "dr_px": dr, "content_shift": f"{sy},{sx}", "keep": not reason,
+                    "reason": reason})
     return out
 
 
@@ -107,7 +109,7 @@ def main() -> None:
     print(f"{len(done)} frames aligned and scored, {int(table.keep.sum())} kept; rejected: "
           f"{done[~done.keep].reason.value_counts().to_dict()}")
     if len(done):
-        print(done[["corr", "corr_raw", "mean_ratio", "sharp_ratio", "shift_px", "dr_px"]].describe().round(3).to_string())
+        print(done[["corr", "corr_raw", "mean_ratio", "sharp_ratio", "disk_shift_px", "dr_px"]].describe().round(3).to_string())
         print("kept per training image:", table[table.keep].groupby("train_stem").size().value_counts().sort_index()
               .to_dict())
         contact_sheet(table)

@@ -26,7 +26,7 @@ from torch.utils.data import Dataset
 from filament.data.images import read_image
 from filament.data.rle import rle_to_mask
 from filament.detection.model import make_input
-from filament.segmentation.dataset import ImageInfo, normalize_with
+from filament.segmentation.dataset import ImageInfo, NeighbourSampler, normalize_with
 
 
 def full_image_input(info: ImageInfo, guide_dir: Path | None = None) -> np.ndarray:
@@ -65,8 +65,11 @@ class InstanceCropDataset(Dataset):
         augment: A.Compose | None = None,
         min_instance_area: int = 30,
         guide_dir: Path | None = None,
+        neighbours: dict[str, list[Path]] | None = None,
+        neighbour_p: float = 0.5,
     ):
         sub = ann[ann.stem.isin(set(stems))]
+        self.swap = NeighbourSampler(neighbours, neighbour_p)  # real neighbouring frames, same labels
         self.guide_dir = Path(guide_dir) if guide_dir is not None else None
         if self.guide_dir is not None:
             missing = sorted(set(sub.stem) - {p.stem for p in self.guide_dir.glob("*.png")})
@@ -113,6 +116,7 @@ class InstanceCropDataset(Dataset):
         item = self.items[rng.integers(len(self.items))]
         info = self.infos[item["stem"]]
         img, guide = self._image(item["stem"])
+        img, info = self.swap(item["stem"], img, info, rng)
         cy, cx = self._center(rng, item["centers"], info)
         h, w = img.shape
         y0 = int(np.clip(cy - self.crop // 2, 0, h - self.crop))

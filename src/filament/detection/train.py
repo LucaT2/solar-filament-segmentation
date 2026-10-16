@@ -34,7 +34,7 @@ from filament.evaluation.metric import score_images
 from filament.evaluation.scoring import GroundTruth, score_components
 from filament.paths import get_data_paths, get_output_dir, resolve_exp_dir
 from filament.segmentation.dataset import build_augment, image_info
-from filament.segmentation.train import amp_dtype, lr_lambda
+from filament.segmentation.train import amp_dtype, load_training_neighbours, lr_lambda
 from filament.tracking import start_run
 
 
@@ -49,6 +49,8 @@ class DetTrainConfig:
     mask_dice_weight: float = 0.0  # mask loss = BCE + this x soft Dice per instance (0 = torchvision's BCE only)
     guide: str | None = None  # segmentation experiment whose probability maps become the 2nd input channel
     # (its oof/ maps for training images; OOF, so no image's guide comes from a model that saw its labels)
+    neighbours: str | None = None  # aligned neighbouring GONG frames (filament.data.neighbours) used as training images
+    neighbour_p: float = 0.5  # probability that a training crop comes from a neighbour instead of the image itself
     guide_test_maps: str = "test"  # the guide's folder with test maps. Training sees single-model OOF maps, so
     # single-model test maps (e.g. test_fold0) match them better than a softer multi-fold average
     detections_per_img: int = 100
@@ -153,7 +155,8 @@ def run(cfg: DetTrainConfig, fold: int) -> dict:
     stamp(f"image stats for {len(infos)} images in {time.time() - t0:.0f}s", t_start)
 
     ds = InstanceCropDataset(ann, infos, train_stems, cfg.crop, cfg.samples_per_epoch, cfg.pos_fraction,
-                             build_augment(cfg.augment), cfg.min_instance_area, guide_dir(cfg, "oof"))
+                             build_augment(cfg.augment), cfg.min_instance_area, guide_dir(cfg, "oof"),
+                             load_training_neighbours(cfg.neighbours, train_stems), cfg.neighbour_p)
     loader = DataLoader(ds, batch_size=cfg.batch_size, shuffle=True, num_workers=cfg.num_workers, pin_memory=True,
                         drop_last=True, persistent_workers=cfg.num_workers > 0, collate_fn=collate)
     gt = GroundTruth(ann, val_stems) if val_stems else None
