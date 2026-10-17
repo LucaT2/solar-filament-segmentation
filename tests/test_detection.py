@@ -228,6 +228,38 @@ def test_dice_mask_loss_adds_to_bce_and_restores_torchvision():
     assert tv_roi_heads.maskrcnn_loss is original  # torchvision's function is restored after the forward pass
 
 
+def test_upscaled_crops_keep_masks_on_the_filaments(ann, ai):
+    from filament.detection.dataset import InstanceCropDataset
+    from filament.paths import get_data_paths
+    from filament.segmentation.dataset import image_info
+
+    stem = ai[ai.n_annotators == 1].stem.iloc[0]
+    infos = {stem: image_info(get_data_paths().train_images / f"{stem}.jpeg")}
+    contrast = {}
+    for scale in (1.0, 2.0):
+        ds = InstanceCropDataset(ann, infos, [stem], crop=512, samples_per_epoch=10, pos_fraction=1.0, scale=scale)
+        assert ds.native == int(512 / scale)
+        vals = []
+        for i in range(10):
+            x, t = ds[i]
+            assert x.shape == (3, 512, 512) and t["masks"].shape[1:] == (512, 512)
+            if len(t["masks"]):
+                inside = t["masks"].any(0)
+                vals.append(float(x[0][~inside].mean() - x[0][inside].mean()))
+        contrast[scale] = np.mean(vals)
+    assert contrast[2.0] > 0.5 * contrast[1.0] > 0  # masks still sit on the dark filaments after upscaling
+
+
+def test_upscaled_prediction_returns_original_coordinates():
+    from filament.detection.model import build_maskrcnn, predict_instances
+
+    torch.manual_seed(0)
+    model = build_maskrcnn(pretrained=False, size=256)
+    x = np.random.default_rng(0).normal(size=(128, 128)).astype(np.float32)
+    inst = predict_instances(model, x, torch.device("cpu"), scale=2.0)  # runs on a 256 px input
+    assert len(inst) == 0 or (inst.boxes[:, 2:] <= 128 + 1e-3).all()
+
+
 def test_maskrcnn_trains_and_predicts_raw_instances():
     from filament.detection.model import build_maskrcnn, predict_instances, set_input_size
 

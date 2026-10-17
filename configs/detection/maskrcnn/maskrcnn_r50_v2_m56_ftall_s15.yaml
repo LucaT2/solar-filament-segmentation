@@ -1,0 +1,30 @@
+# Bet 2: Mask R-CNN at 1.5x input resolution. As maskrcnn_r50_v2_m56_ftall (whole backbone at lr x 0.25, batch 6,
+# 32 epochs), but training crops of 683 native px are upscaled to 1024 and full images to 3072 px for prediction
+# (boxes mapped back): filaments appear 1.5x wider, so the finest feature level and the 56 x 56 masks resolve thin,
+# small and faint filaments better. Per-step cost unchanged; full-image inference ~1.5^2 x (6.2 GiB at 2x).
+name: maskrcnn_r50_v2_m56_ftall_s15
+arch: maskrcnn
+pretrained: true
+trainable_layers: 5
+backbone_lr_mult: 0.25
+mask_size: 56
+scale: 1.5
+detections_per_img: 100
+crop: 1024
+batch_size: 6
+epochs: 32
+samples_per_epoch: 2000
+pos_fraction: 0.8
+min_instance_area: 68        # = 30 px in the original image
+augment: base
+lr: 1.5e-4
+weight_decay: 1.0e-4
+warmup_epochs: 2
+grad_clip: 10.0
+amp: fp16
+num_workers: 4
+val_every: 4                  # full images are 3072 px: validation is slower
+val_mask_threshold: 0.5
+val_score_thresholds: [0.3, 0.5, 0.7]
+val_min_area: 100
+seed: 42

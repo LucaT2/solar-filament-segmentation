@@ -82,22 +82,28 @@ def to_input(x: np.ndarray, device) -> torch.Tensor:
 
 
 @torch.no_grad()
-def predict_instances(model: nn.Module, x: np.ndarray, device, amp_dtype=None) -> Instances:
+def predict_instances(model: nn.Module, x: np.ndarray, device, amp_dtype=None, scale: float = 1.0) -> Instances:
     """Raw detections for one image: boxes, scores and the M x M soft masks (not pasted).
 
     ``x`` is a normalized (H, W) image or a (3, H, W) ``make_input`` array (with a guide map).
+    ``scale`` > 1: the image is upscaled (bicubic) by that factor first, as in training; boxes are returned in the
+    original image's coordinates.
     Runs the model's stages directly instead of ``model(images)``, which would paste every mask into a full-size
     float image (100 detections x 2048 x 2048 floats).
     """
     model.eval()
     h, w = x.shape[-2:]
-    set_input_size(model, max(h, w))
+    inp = to_input(x, device)
+    if scale != 1:
+        size = (int(round(h * scale)), int(round(w * scale)))
+        inp = torch.nn.functional.interpolate(inp[None], size=size, mode="bicubic", align_corners=False)[0]
+    set_input_size(model, max(inp.shape[-2:]))
     with torch.autocast(device.type, dtype=amp_dtype, enabled=amp_dtype is not None and device.type == "cuda"):
-        images, _ = model.transform([to_input(x, device)])
+        images, _ = model.transform([inp])
         features = model.backbone(images.tensors)
         proposals, _ = model.rpn(images, features)
         det = model.roi_heads(features, proposals, images.image_sizes)[0][0]
-    ih, iw = images.image_sizes[0]
+    ih, iw = images.image_sizes[0]  # the (upscaled) input size: dividing by it maps boxes back to the original image
     boxes = det["boxes"].float() * torch.tensor([w / iw, h / ih, w / iw, h / ih], device=det["boxes"].device)
     masks = det["masks"][:, 0]
     if len(det["scores"]) == 0:

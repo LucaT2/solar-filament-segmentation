@@ -67,8 +67,12 @@ class InstanceCropDataset(Dataset):
         guide_dir: Path | None = None,
         neighbours: dict[str, list[Path]] | None = None,
         neighbour_p: float = 0.5,
+        scale: float = 1.0,
     ):
         sub = ann[ann.stem.isin(set(stems))]
+        # scale > 1: a crop of crop / scale native pixels is upscaled to ``crop`` (filaments appear ``scale`` x larger)
+        self.scale = scale
+        self.native = int(round(crop / scale))
         self.swap = NeighbourSampler(neighbours, neighbour_p)  # real neighbouring frames, same labels
         self.guide_dir = Path(guide_dir) if guide_dir is not None else None
         if self.guide_dir is not None:
@@ -119,15 +123,21 @@ class InstanceCropDataset(Dataset):
         img, info = self.swap(item["stem"], img, info, rng)
         cy, cx = self._center(rng, item["centers"], info)
         h, w = img.shape
-        y0 = int(np.clip(cy - self.crop // 2, 0, h - self.crop))
-        x0 = int(np.clip(cx - self.crop // 2, 0, w - self.crop))
-        sl = (slice(y0, y0 + self.crop), slice(x0, x0 + self.crop))
+        n = self.native
+        y0 = int(np.clip(cy - n // 2, 0, h - n))
+        x0 = int(np.clip(cx - n // 2, 0, w - n))
+        sl = (slice(y0, y0 + n), slice(x0, x0 + n))
         image = img[sl]
         layers = [m for m in (rle_to_mask(r)[sl] for r in item["rles"]) if m.any()]
         n_inst = len(layers)
         if guide is not None:  # rides along as one more mask layer: same flips/rotations, no intensity changes
             layers.append(guide[sl])
-        stack = np.stack(layers, axis=-1).astype(np.uint8) if layers else np.zeros((self.crop, self.crop, 0), np.uint8)
+        stack = np.stack(layers, axis=-1).astype(np.uint8) if layers else np.zeros((n, n, 0), np.uint8)
+        if n != self.crop:  # upscale: image smoothly, masks with nearest neighbour (stay binary)
+            image = cv2.resize(image, (self.crop, self.crop), interpolation=cv2.INTER_CUBIC)
+            stack = np.stack([cv2.resize(stack[..., k], (self.crop, self.crop), interpolation=cv2.INTER_NEAREST)
+                              for k in range(stack.shape[-1])], axis=-1) if stack.shape[-1] else \
+                np.zeros((self.crop, self.crop, 0), np.uint8)
         if self.augment is not None:
             if stack.shape[-1]:
                 out = self.augment(image=image, mask=stack)

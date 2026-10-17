@@ -105,7 +105,8 @@ def main() -> None:
             print(f"guide maps: {guides}")
         for path in tqdm(images, desc=args.split):
             x = full_image_input(image_info(path), guides)
-            save_instances(out_dir, path.stem, pooled([predict_instances(m, x, device, dtype) for m in models]))
+            save_instances(out_dir, path.stem, pooled([predict_instances(m, x, device, dtype, cfg.get("scale", 1.0))
+                                                            for m in models]))
         n += len(images)
     print(f"{n} {args.split} predictions in {time.time() - t0:.0f}s -> {out_dir}")
 

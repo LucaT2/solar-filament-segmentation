@@ -255,6 +255,17 @@ ConvNeXt U-Net 0.422 (0.439 with classifier), U-Net ensemble + classifier 0.449:
       `max_hours` 3.8, fold 0, vs the whole-backbone Mask R-CNN (0.446 at 32 epochs; its epoch-20 validation 0.428).
 - [ ] B4 — Boundary branch (BMask R-CNN) / PointRend: outlines and fine structures; small expected gain.
 
+**Risky bets (agreed 2026-10-18; the 5-fold final waits until the end)**
+- [ ] **Bet 2 — higher input resolution for Mask R-CNN** (`scale` option): training crops of 1024/scale native px
+      upscaled to 1024 (cubic; masks nearest), full images predicted at 2048 × scale (boxes mapped back). Memory at
+      inference: 1.7 / 3.6 / 6.2 GiB at 1× / 1.5× / 2×. Screen: `maskrcnn_r50_v2_m56_ftall_s2` (GPU 0) and `_s15`
+      (GPU 1), 32 epochs, validation every 4 epochs, vs 0.446 at 1×.
+- [ ] **Bet 1 — semi-supervised (A2):** unlabelled frames from days ≥ 2 days from every training/test image (one
+      middle frame per competition site and day; `scripts/data/download_unlabelled.py`, CPU notebook
+      `kaggle_download.ipynb`, ~3,000 frames); teacher = fold-0-clean combination (ResNet34 + ConvNeXt + Mask R-CNN,
+      fold 0 only); confident instances as targets, crops with unsure instances skipped; student Mask R-CNN on
+      50% real + 50% pseudo crops vs 0.446.
+
 **C. New architectures (parked)**
 - C1 Mask2Former: 1/4-resolution masks vs 8 px filaments, slow convergence, ~2 days → parked.
 - C2 Bigger detector backbones (ResNeXt-101 / Swin): need detectron2 / MMDetection for COCO weights.
