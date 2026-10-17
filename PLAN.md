@@ -215,6 +215,13 @@ models trained on the same 707 images. Kaggle quota is the bottleneck (30 h/week
       sample of 30: masks fit within median 1 px (90% ≤ 2 px) relative to the training image itself; filament
       contrast 0.93× the original. Private Kaggle dataset `tasadanluca/solar-filament-neighbours`. Screen prepared:
       ConvNeXt and ResNet34 U-Net + neighbours (GPU 0), whole-backbone Mask R-CNN + neighbours, 32 epochs (GPU 1).
+      **Result (2026-10-18, fold 0, neighbour_p 0.5, 1,912 frames for 531 of 565 training images):** ConvNeXt U-Net
+      0.422 → 0.415, ΔPQ −0.008 [−0.015, −0.000] (SQ −0.005, FP +70; worse at B, L, M, T); with classifier 0.439 →
+      0.435. Mask R-CNN whole backbone 0.446 → 0.445, −0.001 [−0.010, +0.007]. → **A1 dropped.** Likely causes:
+      ~1–2 px residual misalignment acts as outline label noise for the pixel-wise U-Net; neighbours are slightly
+      softer (contrast 0.93×) than the annotated frames; little variation the augmentations do not already cover.
+      (The ResNet34 + neighbours run silently used the reference config — CRLF line endings broke the config edit —
+      and retrained plain ResNet34; fixed, guarded by a test, not re-run.)
 - [ ] A2 — Semi-supervised: pseudo-labels on unlabelled GONG images (allowed per the quoted clarification); after A1.
 - [ ] A3 — Copy-paste augmentation of real filaments (Ghiasi et al. 2021).
 - [ ] A4 — Consensus-aware detector targets (share of annotators who drew a filament); low odds (U-Net consensus

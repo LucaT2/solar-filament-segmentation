@@ -99,5 +99,20 @@ def test_neighbour_sampler_swaps_images_and_keeps_the_disk(tmp_path):
     assert NeighbourSampler(nb, p=1.0)("other", img, info, rng)[0] is img  # images without neighbours unchanged
 
 
+def test_every_neighbour_config_uses_neighbours():
+    """*_nb configs must actually set ``neighbours`` and carry their own name (a silent fallback to the reference
+    config retrains the reference)."""
+    from filament.detection.train import DetTrainConfig
+    from filament.paths import REPO_ROOT
+    from filament.segmentation.train import TrainConfig
+
+    paths = sorted(REPO_ROOT.glob("configs/**/*_nb.yaml"))
+    assert paths
+    for path in paths:
+        cfg = (DetTrainConfig if "detection" in path.parts else TrainConfig).load(path)
+        assert cfg.neighbours, path
+        assert cfg.name == path.stem, path
+
+
 def test_archive_url():
     assert frame_url("20140609195854Bh") == "https://gong2.nso.edu/HA/hag/201406/20140609/20140609195854Bh.jpg"

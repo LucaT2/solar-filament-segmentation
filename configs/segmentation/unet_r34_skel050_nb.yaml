@@ -3,7 +3,9 @@
 # probability 0.5, with the original masks (filament.data.neighbours; host-approved for training, never at
 # inference). Everything else identical to the reference config, so the run compares directly with it.
 # Stage 5 step 1b: baseline (512 crops, 30 epochs) + Skeleton Recall loss, weight 0.5.
-name: unet_r34_skel050
+name: unet_r34_skel050_nb
+neighbours: neighbours
+neighbour_p: 0.5
 arch: Unet
 encoder: resnet34
 pretrained: true
