@@ -345,13 +345,13 @@ SCREEN_CONFIG = '''
 # A1: neighbouring GONG frames as extra training images (dataset solar-filament-neighbours must be attached).
 # Fold 0, each identical to its reference except for the neighbours (jobs are dealt out to the GPUs in turn):
 # * GPU 0: ConvNeXt-T U-Net + neighbours (~1.6 h), then ResNet34 U-Net + neighbours (~1.3 h): both U-Net members
-# * GPU 1: whole-backbone Mask R-CNN + neighbours, 32 epochs (~5 h; reference 0.446)
+# * GPU 1: whole-backbone Mask R-CNN + neighbours, 32 epochs (~5 h; reference 0.446; time budget 6.4 h)
 # max_hours stops a job cleanly after the last epoch that still fits. References are compared locally.
 EXPERIMENTS = [
     {"config": "configs/segmentation/unet_convnext_t_skel050_nb.yaml",           "folds": [0], "full_seeds": [],
      "overrides": []},
     {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m56_ftall_nb.yaml",   "folds": [0], "full_seeds": [],
-     "overrides": ["max_hours=5.4"]},
+     "overrides": ["max_hours=6.4"]},
     {"config": "configs/segmentation/unet_r34_skel050_nb.yaml",                  "folds": [0], "full_seeds": [],
      "overrides": []},
 ]
