@@ -376,4 +376,42 @@ screen_cells[0] = nbf.v4.new_markdown_cell(cells[0].source.replace(
     "# Solar Filament Segmentation: experiments on Kaggle",
     "# Solar Filament Segmentation: fold-0 screen (parallel session)"))
 nbf.write(nbf.v4.new_notebook(cells=screen_cells, metadata=META), REPO_ROOT / "notebooks/kaggle/kaggle_screen.ipynb")
-print("written", len(cells), "cells x 2 notebooks")
+
+# Third notebook, CPU only (no GPU quota): downloads unlabelled GONG frames from new days into its output, to be
+# attached as an input of the GPU notebooks (pseudo-labelling, semi-supervised training).
+DOWNLOAD_TITLE = """
+# Solar Filament Segmentation: download unlabelled GONG frames (CPU)
+
+Downloads unlabelled H-alpha frames from days at least 2 days away from every training and test image (one frame per
+competition site and day) into `/kaggle/working/unlabelled/` (`frames/*.jpg`, `manifest.csv`), with
+`scripts/data/download_unlabelled.py`. The output is then attached to the GPU notebooks for pseudo-labelling.
+
+### Settings
+* Accelerator: **None** (CPU only: no GPU quota). Internet: **on**.
+* *Add Input*: competition **filament-segmentation-2026** (to know the training and test dates).
+* *Add-ons → Secrets*: the GitHub token (label `GITHUB_SECRET`). Run with **Save Version → Save & Run All**.
+"""
+DOWNLOAD_CONFIG = '''
+# ---- configuration ---------------------------------------------------------------------------------------
+DAYS = 600                             # days sampled evenly over 2011-2022 (~5 frames per day: ~3,000 frames)
+MARGIN_DAYS = 2                        # minimum distance from every training and test image
+GITHUB_SECRET = "Github_key"           # label of the Kaggle secret holding the GitHub token
+WANDB_SECRET = "WANDB_API_KEY"         # (not needed here)
+REPO_URL = "github.com/LucaT2/solar-filament-segmentation.git"
+REPO_BRANCH = "main"
+REPO_DATASET = None
+'''
+DOWNLOAD_RUN = """
+# ~40 min of archive listings, then ~2 h of downloads (one polite request per ~2 s); resumable
+!python -W ignore scripts/data/download_unlabelled.py --days {DAYS} --margin-days {MARGIN_DAYS} --out /kaggle/working/unlabelled
+import pandas as pd
+m = pd.read_csv("/kaggle/working/unlabelled/manifest.csv")
+log(f"{len(m)} frames, {int(m.ok.sum())} pass the quality check; per site: {m[m.ok].site.value_counts().to_dict()}")
+"""
+download_cells = [nbf.v4.new_markdown_cell(DOWNLOAD_TITLE.strip()), nbf.v4.new_code_cell(DOWNLOAD_CONFIG.strip()),
+                  cells[2], cells[3], cells[4], nbf.v4.new_markdown_cell("## 2. Download"),
+                  nbf.v4.new_code_cell(DOWNLOAD_RUN.strip())]
+CPU_META = {**META, "kaggle": {"accelerator": "none", "isInternetEnabled": True}}
+nbf.write(nbf.v4.new_notebook(cells=download_cells, metadata=CPU_META),
+          REPO_ROOT / "notebooks/kaggle/kaggle_download.ipynb")
+print("written", len(cells), "cells x 2 notebooks + the download notebook")
