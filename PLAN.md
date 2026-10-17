@@ -203,7 +203,7 @@ ConvNeXt U-Net 0.422 (0.439 with classifier), U-Net ensemble + classifier 0.449:
 
 | Step | What | Result | Verdict |
 |---|---|---|---|
-| A1 | Neighbouring GONG frames as training data | U-Net −0.008 (significant), Mask R-CNN −0.001 | tried — no gain; **parked** |
+| A1 | Neighbouring GONG frames as training data | U-Net −0.008 (significant), Mask R-CNN −0.001; LB 0.38 both | tried — no gain; **parked** |
 | B1 | Cascade Mask R-CNN (19 epochs, time budget) | 0.444 (−0.002); ahead at equal epochs; LB 0.37 alone | tried — tie |
 | B3 | Dice term in the mask loss (20 epochs) | 0.446 (−0.001); SQ +0.002 | tried — tie |
 | D3 | Map average U-Net ensemble + Mask R-CNN + classifier | **0.461**, LB **0.39** (with cascade 0.460, LB 0.38) | tried — **best; final recipe** |
