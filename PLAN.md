@@ -205,6 +205,16 @@ models trained on the same 707 images. Kaggle quota is the bottleneck (30 h/week
       2026-10-12: same image product on the disk (corr 0.994, fit 0.999·x + 0.6, residual 2.65 grey levels = JPEG),
       disk centre/radius within 1 px, a frame every minute; off-disk background differs (23.6 vs 17.3) → use the
       training image's off-disk area. Exclude frames within 30 min of any test image.
+      *Built 2026-10-17/18:* `filament.data.neighbours`, `scripts/data/download_neighbours.py` + `align_neighbours.py`,
+      `NeighbourSampler` in both datasets (`neighbours` / `neighbour_p` config options; validation and OOF stay on the
+      originals). 2,628 frames downloaded (1.6 GB, 0 failures); annotated images are often a site's first frame of
+      the day → later fallbacks (+8, +10 min). Lessons: bilinear sub-pixel alignment erased ~70% of the fine texture;
+      disk-edge fitting added 3–5 px errors, while the archive frames are already co-registered by NSO (~1 px) → frames
+      are used as they are, moved only for a clear content offset (≥ 3 px, 35 frames); quality check on smoothed
+      images (σ 3 px), since raw correlation is dominated by seeing noise. 2,396 kept (91%) for 663 images; random
+      sample of 30: masks fit within median 1 px (90% ≤ 2 px) relative to the training image itself; filament
+      contrast 0.93× the original. Private Kaggle dataset `tasadanluca/solar-filament-neighbours`. Screen prepared:
+      ConvNeXt and ResNet34 U-Net + neighbours (GPU 0), whole-backbone Mask R-CNN + neighbours, 32 epochs (GPU 1).
 - [ ] A2 — Semi-supervised: pseudo-labels on unlabelled GONG images (allowed per the quoted clarification); after A1.
 - [ ] A3 — Copy-paste augmentation of real filaments (Ghiasi et al. 2021).
 - [ ] A4 — Consensus-aware detector targets (share of annotators who drew a filament); low odds (U-Net consensus
