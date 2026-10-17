@@ -1,0 +1,37 @@
+# Reference: configs/segmentation/unet_convnext_t_skel050.yaml
+# + neighbouring GONG frames (A1): a training crop comes from a random aligned neighbour frame of its image with
+# probability 0.5, with the original masks (filament.data.neighbours; host-approved for training, never at
+# inference). Everything else identical to the reference config, so the run compares directly with it.
+# Stage 5 step 3a (encoder screen): current best recipe (skel050: Skeleton Recall 0.5, 512 crops, 30 epochs)
+# with a ConvNeXt-Tiny encoder (timm weights). Large 7x7 kernels -> more context; stride-4 stem -> no 1/2-res skip.
+# Same batch / learning-rate scheme as unet_effb4_skel050 so the two encoders are directly comparable.
+name: unet_convnext_t_skel050_nb
+neighbours: neighbours
+neighbour_p: 0.5
+arch: Unet
+encoder: tu-convnext_tiny
+pretrained: true
+crop: 512
+batch_size: 16
+epochs: 30
+samples_per_epoch: 4000
+pos_fraction: 0.7
+augment: base
+lr: 0.0007
+encoder_lr_mult: 0.25
+weight_decay: 0.0001
+warmup_epochs: 2
+bce_weight: 1.0
+dice_weight: 1.0
+skel_weight: 0.5
+skel_radius: 1
+target_mode: random
+amp: fp16
+num_workers: 4
+val_every: 2
+val_thresholds: [0.6, 0.7, 0.8, 0.9]
+val_min_area: 50
+seed: 42
+wandb: auto
+wandb_project: null
+wandb_entity: null

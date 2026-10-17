@@ -342,29 +342,27 @@ nbf.write(nbf.v4.new_notebook(cells=cells, metadata=META), REPO_ROOT / "notebook
 # Second notebook for a parallel session (Kaggle allows 2 GPU sessions at once): same code, different experiments.
 SCREEN_CONFIG = '''
 # ---- configuration ---------------------------------------------------------------------------------------
-# Two variants of the whole-backbone Mask R-CNN (fold 0, 0.446), one per GPU, sized for a limited GPU quota
-# (~4.2 h in total; 569-640 s per epoch on a T4). max_hours stops a job cleanly after the last epoch that still fits,
-# keeping its best model and OOF predictions:
-# * GPU 0: Cascade Mask R-CNN (three box stages), batch 4 / lr 1e-4 (batch 6 ran out of memory), 20 epochs
-# * GPU 1: Mask R-CNN with BCE + Dice in the mask loss, otherwise identical to the baseline, 20 epochs
-# Compared here with the ConvNeXt U-Net fold 0 (from the last successful version's output). The comparison with
-# the whole-backbone Mask R-CNN (0.446) is done locally: its run ended with ERROR status, and Kaggle only offers
-# outputs of successful versions as inputs.
+# A1: neighbouring GONG frames as extra training images (dataset solar-filament-neighbours must be attached).
+# Fold 0, each identical to its reference except for the neighbours (jobs are dealt out to the GPUs in turn):
+# * GPU 0: ConvNeXt-T U-Net + neighbours (~1.6 h), then ResNet34 U-Net + neighbours (~1.3 h): both U-Net members
+# * GPU 1: whole-backbone Mask R-CNN + neighbours, 32 epochs (~5 h; reference 0.446)
+# max_hours stops a job cleanly after the last epoch that still fits. References are compared locally.
 EXPERIMENTS = [
-    {"config": "configs/detection/cascade/cascade_r50_v2_m56_ftall.yaml",        "folds": [0], "full_seeds": [],
-     "overrides": ["epochs=20", "max_hours=3.8"]},
-    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m56_ftall_dice.yaml", "folds": [0], "full_seeds": [],
-     "overrides": ["epochs=20", "max_hours=3.8"]},
+    {"config": "configs/segmentation/unet_convnext_t_skel050_nb.yaml",           "folds": [0], "full_seeds": [],
+     "overrides": []},
+    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m56_ftall_nb.yaml",   "folds": [0], "full_seeds": [],
+     "overrides": ["max_hours=5.4"]},
+    {"config": "configs/segmentation/unet_r34_skel050_nb.yaml",                  "folds": [0], "full_seeds": [],
+     "overrides": []},
 ]
 # attached inputs, matched by "<notebook>/<experiment>" in their path: this notebook's previous output
-# (Add Input -> Your Work -> Notebooks -> this notebook), holding ConvNeXt-Tiny + U-Net fold 0 and the whole-backbone
-# Mask R-CNN fold 0 with their OOF predictions
+# (Add Input -> Your Work -> Notebooks -> this notebook), holding ConvNeXt-Tiny + U-Net fold 0 and its OOF maps
 CHECKPOINT_DATASETS = ["solar-filament-v2/unet_convnext_t_skel050"]
-BASELINE = "unet_convnext_t_skel050"   # in-notebook reference; vs the whole-backbone Mask R-CNN: locally
+BASELINE = "unet_convnext_t_skel050"   # in-notebook reference (the ConvNeXt run's direct comparison)
 TTA = True                             # U-Net only: average 4 flips per model when predicting
 SUBMISSIONS = {                        # output name -> (experiment, [model names / glob patterns])
-    "cascade_m56_ftall_fold0": ("cascade_r50_v2_m56_ftall", ["fold0"]),
-    "maskrcnn_m56_ftall_dice_fold0": ("maskrcnn_r50_v2_m56_ftall_dice", ["fold0"]),
+    "maskrcnn_ftall_nb_fold0": ("maskrcnn_r50_v2_m56_ftall_nb", ["fold0"]),
+    "unet_convnext_nb_fold0": ("unet_convnext_t_skel050_nb", ["fold0"]),
 }
 GITHUB_SECRET = "Github_key"           # label of the Kaggle secret holding the GitHub token
 WANDB_SECRET = "WANDB_API_KEY"         # label of the (optional) Kaggle secret holding the W&B API key
