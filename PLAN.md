@@ -198,8 +198,20 @@ so more gain must come from new information (data) or from aligning decisions wi
 models trained on the same 707 images. Kaggle quota is the bottleneck (30 h/week); the public LB (2 decimals,
 ~90 images) cannot show gains this size — local paired comparisons decide.*
 
+**Status (2026-10-18)** — tried so far, all fold 0, honest PQ; references: whole-backbone Mask R-CNN 0.446,
+ConvNeXt U-Net 0.422 (0.439 with classifier), U-Net ensemble + classifier 0.449:
+
+| Step | What | Result | Verdict |
+|---|---|---|---|
+| A1 | Neighbouring GONG frames as training data | U-Net −0.008 (significant), Mask R-CNN −0.001 | tried — no gain; **parked** |
+| B1 | Cascade Mask R-CNN (19 epochs, time budget) | 0.444 (−0.002); ahead at equal epochs; LB 0.37 alone | tried — tie |
+| B3 | Dice term in the mask loss (20 epochs) | 0.446 (−0.001); SQ +0.002 | tried — tie |
+| D3 | Map average U-Net ensemble + Mask R-CNN + classifier | **0.461**, LB **0.39** (with cascade 0.460, LB 0.38) | tried — **best; final recipe** |
+| – | Whole backbone (trainable_layers 5, lr × 0.25), guided Mask R-CNN, 3-detector average, fusion classifier | 0.446 / 0.438 / 0.450 / ≤ +0.005 | tried (see experiment log) |
+| A2, A3, A4, B2, B4, C1–C3, D1, D2, D4 | — | — | not tried yet |
+
 **A. Data (new information)**
-- [ ] **A1 — Neighbouring GONG frames as training data (top priority).** ~4 frames per training image (±2, ±5 min,
+- [x] **A1 — Neighbouring GONG frames as training data** *(tried 2026-10-18: no gain; parked)*. ~4 frames per training image (±2, ±5 min,
       same site) from gong2.nso.edu, aligned onto the training image's disk, trained with the same masks; inference
       stays single-image. Host ruling: allowed for training, never at inference (see forum). Feasibility checked
       2026-10-12: same image product on the disk (corr 0.994, fit 0.999·x + 0.6, residual 2.65 grey levels = JPEG),
@@ -217,7 +229,7 @@ models trained on the same 707 images. Kaggle quota is the bottleneck (30 h/week
       ConvNeXt and ResNet34 U-Net + neighbours (GPU 0), whole-backbone Mask R-CNN + neighbours, 32 epochs (GPU 1).
       **Result (2026-10-18, fold 0, neighbour_p 0.5, 1,912 frames for 531 of 565 training images):** ConvNeXt U-Net
       0.422 → 0.415, ΔPQ −0.008 [−0.015, −0.000] (SQ −0.005, FP +70; worse at B, L, M, T); with classifier 0.439 →
-      0.435. Mask R-CNN whole backbone 0.446 → 0.445, −0.001 [−0.010, +0.007]. → **A1 dropped.** Likely causes:
+      0.435. Mask R-CNN whole backbone 0.446 → 0.445, −0.001 [−0.010, +0.007]. → no gain in this form. Likely causes:
       ~1–2 px residual misalignment acts as outline label noise for the pixel-wise U-Net; neighbours are slightly
       softer (contrast 0.93×) than the annotated frames; little variation the augmentations do not already cover.
       **Parked, not dropped (user, 2026-10-18).** Follow-ups if revisited: neighbours for the detector only (no harm
@@ -233,9 +245,12 @@ models trained on the same 707 images. Kaggle quota is the bottleneck (30 h/week
       metadata for training" → treated as forbidden; masks-derived skeletons are fine.
 
 **B. Heads and losses on Mask R-CNN**
-- [ ] **B1 — Cascade Mask R-CNN** (implemented, `filament.detection.cascade`); re-run at batch 4 after the OOM.
+- [x] **B1 — Cascade Mask R-CNN** (`filament.detection.cascade`) *(tried 2026-10-16: tie)*. Batch 4 after an OOM at batch
+      6; stopped by the time budget after epoch 19: 0.444 vs 0.446 (−0.002 [−0.011, +0.006]), but ahead at equal epochs
+      (val 0.444 vs 0.427 at epoch 18); fewer FP (415 vs 568), more FN; LB 0.37 alone, 0.38 with the U-Net ensemble.
 - [ ] B2 — Mask Scoring head (score × predicted mask IoU): ranks detections by mask quality, as PQ rewards.
-- [ ] B3 — Dice / boundary-weighted loss in the mask head (outlines; limited: our SQ 0.676 > human-vs-human 0.634).
+- [x] B3 — Dice / boundary-weighted loss in the mask head *(tried 2026-10-16, Dice only: tie)* (outlines; limited: our
+      SQ 0.676 > human-vs-human 0.634). Result: 0.446 at 20 epochs (−0.001 [−0.010, +0.008]), SQ +0.002.
       *Implemented 2026-10-16* (`filament.detection.losses`, `mask_dice_weight`); queued with B1: both 20 epochs,
       `max_hours` 3.8, fold 0, vs the whole-backbone Mask R-CNN (0.446 at 32 epochs; its epoch-20 validation 0.428).
 - [ ] B4 — Boundary branch (BMask R-CNN) / PointRend: outlines and fine structures; small expected gain.
@@ -248,12 +263,14 @@ models trained on the same 707 images. Kaggle quota is the bottleneck (30 h/week
 **D. Inference / combination (for the final submission)**
 - [ ] D1 — TTA for Mask R-CNN (flips/rotations, instance-level merge).
 - [ ] D2 — Several fold models of the best detector, merged.
-- [ ] D3 — Map averaging with the U-Net ensemble + classifier (≤ +0.005 measured).
+- [x] D3 — Map averaging with the U-Net ensemble + classifier *(tried: best result)*: first Mask R-CNN ≤ +0.005;
+      whole-backbone Mask R-CNN **nested 0.461, LB 0.39** (best so far) → the final recipe.
 - [ ] D4 — Explicit pixel-overlap check in `validate_submission` (pipeline is overlap-free by construction; verified
       0 overlapping pixels in the submitted files).
 
-**Order:** A1 tooling + D4 now (no GPU) → next session: Mask R-CNN whole backbone + A1 vs 0.446, and B1 → B2/B3 on
-the winner → A2 if headroom → from ~Oct 29: 5 folds of the winner, D1–D3, report (deadline Nov 15).
+**Order (updated 2026-10-18):** 5 folds of the final recipe (whole-backbone Mask R-CNN + ConvNeXt U-Net, folds 1–4)
+on Kaggle, while D4, D1 and B2 are built locally → B2 screen if ready → A2 if there is headroom → from ~Oct 29:
+final combination tuned on all 707 OOF images, D1–D2, report (deadline Nov 15).
 
 ## Stage 5 — Main approach: precise, connected, consensus segmentation
 *Priorities from Stage 4: (1) component rescoring on all-fold OOF, (2) large and chained filaments: bigger
