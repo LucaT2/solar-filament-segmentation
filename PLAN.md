@@ -220,6 +220,9 @@ models trained on the same 707 images. Kaggle quota is the bottleneck (30 h/week
       0.435. Mask R-CNN whole backbone 0.446 → 0.445, −0.001 [−0.010, +0.007]. → **A1 dropped.** Likely causes:
       ~1–2 px residual misalignment acts as outline label noise for the pixel-wise U-Net; neighbours are slightly
       softer (contrast 0.93×) than the annotated frames; little variation the augmentations do not already cover.
+      **Parked, not dropped (user, 2026-10-18).** Follow-ups if revisited: neighbours for the detector only (no harm
+      there); lower `neighbour_p` (0.2–0.3); only neighbours with sharpness ≥ the original; per-frame mask registration
+      instead of image registration; neighbours as an extra input for semi-supervised pseudo-labels (A2).
       (The ResNet34 + neighbours run silently used the reference config — CRLF line endings broke the config edit —
       and retrained plain ResNet34; fixed, guarded by a test, not re-run.)
 - [ ] A2 — Semi-supervised: pseudo-labels on unlabelled GONG images (allowed per the quoted clarification); after A1.
