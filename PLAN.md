@@ -277,6 +277,12 @@ ConvNeXt U-Net 0.422 (0.439 with classifier), U-Net ensemble + classifier 0.449:
       `kaggle_download.ipynb`, ~3,000 frames); teacher = fold-0-clean combination (ResNet34 + ConvNeXt + Mask R-CNN,
       fold 0 only); confident instances as targets, crops with unsure instances skipped; student Mask R-CNN on
       50% real + 50% pseudo crops vs 0.446.
+      *Built 2026-10-18/19:* 3,252 frames from 600 days (3,251 pass; 448–581 per site; Kaggle CPU download timed out →
+      local). Teacher `teacher_f0` (map average of ResNet34 + ConvNeXt U-Nets, 4-flip TTA, and the first Mask R-CNN,
+      all fold 0; nested fold-0 PQ 0.449), ~1.7 s per frame. 14,528 candidates: 8,628 with P ≥ 0.6 (more than the
+      8,199 annotated filaments), 2,686 unsure (0.3–0.6), 3,214 background; median 1 confident per frame. Archive
+      frames carry text/logo outside the disk → blanked for the student. Private dataset
+      `tasadanluca/solar-filament-pseudo`. Screen: students with cut-off 0.6 (GPU 0) and 0.5 (GPU 1).
 
 **C. New architectures (parked)**
 - C1 Mask2Former: 1/4-resolution masks vs 8 px filaments, slow convergence, ~2 days → parked.
