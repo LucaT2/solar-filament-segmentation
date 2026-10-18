@@ -270,7 +270,8 @@ ConvNeXt U-Net 0.422 (0.439 with classifier), U-Net ensemble + classifier 0.449:
       detector; + 1.5× outlines 0.450 (+0.003). In the U-Net combination it does not help (nested 0.451 vs 0.461;
       without classifier 0.432 vs 0.433): the U-Net already supplies the outlines. Submission
       `outputs/submission_det1x_outline2x.csv`: **LB 0.38**. U-Net ensemble + hybrid submission
-      `outputs/submission_ens_unet_hybrid.csv` (1,254 filaments; test maps match OOF: filament px 0.00373 vs 0.00364).
+      `outputs/submission_ens_unet_hybrid.csv` (1,254 filaments; test maps match OOF: filament px 0.00373 vs 0.00364):
+      **LB 0.39** (same as with the plain 1× Mask R-CNN).
 - [ ] **Bet 1 — semi-supervised (A2):** unlabelled frames from days ≥ 2 days from every training/test image (one
       middle frame per competition site and day; `scripts/data/download_unlabelled.py`, CPU notebook
       `kaggle_download.ipynb`, ~3,000 frames); teacher = fold-0-clean combination (ResNet34 + ConvNeXt + Mask R-CNN,
