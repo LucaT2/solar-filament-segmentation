@@ -260,6 +260,11 @@ ConvNeXt U-Net 0.422 (0.439 with classifier), U-Net ensemble + classifier 0.449:
       upscaled to 1024 (cubic; masks nearest), full images predicted at 2048 × scale (boxes mapped back). Memory at
       inference: 1.7 / 3.6 / 6.2 GiB at 1× / 1.5× / 2×. Screen: `maskrcnn_r50_v2_m56_ftall_s2` (GPU 0) and `_s15`
       (GPU 1), 32 epochs, validation every 4 epochs, vs 0.446 at 1×.
+      **Result (2026-10-18, fold 0):** 1.5× 0.446 (−0.000 [−0.011, +0.011]); 2× 0.431 (**−0.015** [−0.028, −0.002]).
+      Outlines improve steadily with resolution (SQ +0.006 / +0.009), detection gets worse (RQ −0.006 / −0.030; at
+      2× FN 553 → 714, small filaments < 800 px found 58% → 43%): each crop covers ¼ of the area and the receptive
+      field half the solar distance, so faint and small filaments are recognised worse. → no gain as a whole model.
+      Follow-up (local): detections from the 1× model, outlines from the 2× model where they match.
 - [ ] **Bet 1 — semi-supervised (A2):** unlabelled frames from days ≥ 2 days from every training/test image (one
       middle frame per competition site and day; `scripts/data/download_unlabelled.py`, CPU notebook
       `kaggle_download.ipynb`, ~3,000 frames); teacher = fold-0-clean combination (ResNet34 + ConvNeXt + Mask R-CNN,
