@@ -1,0 +1,34 @@
+# Variant: confidence cut-off 0.5 instead of 0.6 (more pseudo-instances, more teacher errors); unsure 0.3-0.5.
+# Bet 1, semi-supervised student: as maskrcnn_r50_v2_m56_ftall (reference 0.446), but half of the training crops
+# come from unlabelled GONG frames of new days, pseudo-labelled by a fold-0-clean teacher (U-Net ResNet34 + ConvNeXt
+# + Mask R-CNN, fold 0 only; nested fold-0 PQ 0.449): candidates with P >= 0.6 are instances, crops touching one
+# with 0.3 <= P < 0.6 are redrawn, P < 0.3 is background (filament.semi). Validation stays on the real fold 0.
+name: maskrcnn_r50_v2_m56_ftall_pseudo_c05
+pseudo: pseudo
+pseudo_p: 0.5
+pseudo_conf: 0.5
+pseudo_unsure: 0.3
+arch: maskrcnn
+pretrained: true
+trainable_layers: 5
+backbone_lr_mult: 0.25
+mask_size: 56
+detections_per_img: 100
+crop: 1024
+batch_size: 6
+epochs: 32
+samples_per_epoch: 2000
+pos_fraction: 0.8
+min_instance_area: 30
+augment: base
+lr: 1.5e-4
+weight_decay: 1.0e-4
+warmup_epochs: 2
+grad_clip: 10.0
+amp: fp16
+num_workers: 4
+val_every: 2
+val_mask_threshold: 0.5
+val_score_thresholds: [0.3, 0.5, 0.7]
+val_min_area: 100
+seed: 42
