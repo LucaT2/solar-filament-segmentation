@@ -51,6 +51,10 @@ class DetTrainConfig:
     # (its oof/ maps for training images; OOF, so no image's guide comes from a model that saw its labels)
     neighbours: str | None = None  # aligned neighbouring GONG frames (filament.data.neighbours) used as training images
     neighbour_p: float = 0.5  # probability that a training crop comes from a neighbour instead of the image itself
+    pseudo: str | None = None  # pseudo-labelled unlabelled frames (filament.semi.data) as an extra training source
+    pseudo_p: float = 0.5  # probability that a training crop comes from a pseudo-labelled frame
+    pseudo_conf: float = 0.6  # teacher P(match) from which a candidate is a training instance
+    pseudo_unsure: float = 0.3  # candidates with P in [unsure, conf) make a crop rejected; below: background
     scale: float = 1.0  # input upscaling: training crops of crop/scale native px upscaled to crop; images x scale
     guide_test_maps: str = "test"  # the guide's folder with test maps. Training sees single-model OOF maps, so
     # single-model test maps (e.g. test_fold0) match them better than a softer multi-fold average
@@ -107,6 +111,17 @@ def guide_dir(cfg: dict | DetTrainConfig, split: str) -> Path | None:
     return resolve_exp_dir(c["guide"]) / folder
 
 
+def load_pseudo(cfg: DetTrainConfig):
+    if not cfg.pseudo:
+        return None
+    from filament.semi.data import PseudoFrames, find_pseudo_dir
+
+    pf = PseudoFrames(find_pseudo_dir(cfg.pseudo), cfg.pseudo_conf, cfg.pseudo_unsure)
+    n_conf = sum(len(i.confident) for i in pf.items)
+    print(f"pseudo-labelled frames: {len(pf)} ({n_conf} confident instances) from {pf.folder}", flush=True)
+    return pf
+
+
 def validate(model, cfg: DetTrainConfig, infos, gt: GroundTruth, device, out_dir: Path | None = None) -> dict:
     """Full-image detections for the validation images -> PQ at a few score cut-offs (mask threshold, min_area fixed)."""
     per_thr: dict[float, list] = {t: [] for t in cfg.val_score_thresholds}
@@ -158,7 +173,8 @@ def run(cfg: DetTrainConfig, fold: int) -> dict:
 
     ds = InstanceCropDataset(ann, infos, train_stems, cfg.crop, cfg.samples_per_epoch, cfg.pos_fraction,
                              build_augment(cfg.augment), cfg.min_instance_area, guide_dir(cfg, "oof"),
-                             load_training_neighbours(cfg.neighbours, train_stems), cfg.neighbour_p, cfg.scale)
+                             load_training_neighbours(cfg.neighbours, train_stems), cfg.neighbour_p, cfg.scale,
+                             load_pseudo(cfg), cfg.pseudo_p)
     loader = DataLoader(ds, batch_size=cfg.batch_size, shuffle=True, num_workers=cfg.num_workers, pin_memory=True,
                         drop_last=True, persistent_workers=cfg.num_workers > 0, collate_fn=collate)
     gt = GroundTruth(ann, val_stems) if val_stems else None

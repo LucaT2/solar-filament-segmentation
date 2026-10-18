@@ -68,8 +68,12 @@ class InstanceCropDataset(Dataset):
         neighbours: dict[str, list[Path]] | None = None,
         neighbour_p: float = 0.5,
         scale: float = 1.0,
+        pseudo=None,
+        pseudo_p: float = 0.5,
     ):
         sub = ann[ann.stem.isin(set(stems))]
+        # semi-supervised: with probability pseudo_p a crop comes from a pseudo-labelled frame (filament.semi.data)
+        self.pseudo, self.pseudo_p = pseudo, pseudo_p
         # scale > 1: a crop of crop / scale native pixels is upscaled to ``crop`` (filaments appear ``scale`` x larger)
         self.scale = scale
         self.native = int(round(crop / scale))
@@ -115,8 +119,8 @@ class InstanceCropDataset(Dataset):
         t = rng.random() * 2 * np.pi
         return int(info.disk.cy + r * np.sin(t)), int(info.disk.cx + r * np.cos(t))
 
-    def __getitem__(self, index: int):
-        rng = np.random.default_rng(int(torch.randint(0, 2**62, (1,)).item()))
+    def _annotated(self, rng: np.random.Generator):
+        """(image crop, instance masks, info, guide crop) from an annotated training image."""
         item = self.items[rng.integers(len(self.items))]
         info = self.infos[item["stem"]]
         img, guide = self._image(item["stem"])
@@ -127,11 +131,21 @@ class InstanceCropDataset(Dataset):
         y0 = int(np.clip(cy - n // 2, 0, h - n))
         x0 = int(np.clip(cx - n // 2, 0, w - n))
         sl = (slice(y0, y0 + n), slice(x0, x0 + n))
-        image = img[sl]
         layers = [m for m in (rle_to_mask(r)[sl] for r in item["rles"]) if m.any()]
+        return img[sl], layers, info, (guide[sl] if guide is not None else None)
+
+    def __getitem__(self, index: int):
+        rng = np.random.default_rng(int(torch.randint(0, 2**62, (1,)).item()))
+        got = None
+        if self.pseudo is not None and len(self.pseudo) and rng.random() < self.pseudo_p:
+            got = self.pseudo.sample(rng, self.native, self.pos_fraction)
+            if got is not None:
+                got = (*got, None)  # pseudo-labelled frames have no guide map
+        image, layers, info, guide = got if got is not None else self._annotated(rng)
+        n = self.native
         n_inst = len(layers)
         if guide is not None:  # rides along as one more mask layer: same flips/rotations, no intensity changes
-            layers.append(guide[sl])
+            layers.append(guide)
         stack = np.stack(layers, axis=-1).astype(np.uint8) if layers else np.zeros((n, n, 0), np.uint8)
         if n != self.crop:  # upscale: image smoothly, masks with nearest neighbour (stay binary)
             image = cv2.resize(image, (self.crop, self.crop), interpolation=cv2.INTER_CUBIC)
