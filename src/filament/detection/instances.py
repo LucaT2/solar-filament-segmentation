@@ -70,6 +70,36 @@ def paste_mask(mask: np.ndarray, box: np.ndarray, threshold: float, shape: tuple
     return y0 + top, x0 + left, patch
 
 
+def box_iou(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """(n, 4) x (m, 4) boxes (x0 y0 x1 y1) -> (n, m) IoU."""
+    if not len(a) or not len(b):
+        return np.zeros((len(a), len(b)))
+    x0 = np.maximum(a[:, None, 0], b[None, :, 0])
+    y0 = np.maximum(a[:, None, 1], b[None, :, 1])
+    x1 = np.minimum(a[:, None, 2], b[None, :, 2])
+    y1 = np.minimum(a[:, None, 3], b[None, :, 3])
+    inter = np.clip(x1 - x0, 0, None) * np.clip(y1 - y0, 0, None)
+    area = lambda r: (r[:, 2] - r[:, 0]) * (r[:, 3] - r[:, 1])
+    return inter / (area(a)[:, None] + area(b)[None, :] - inter + 1e-9)
+
+
+def swap_outlines(det: Instances, outline: Instances, min_iou: float = 0.5) -> tuple[Instances, float]:
+    """``det``'s detections (which and how confident) with ``outline``'s masks where a detection of ``outline``
+    overlaps them clearly (box IoU >= ``min_iou``); box and mask are taken together, the score stays ``det``'s.
+    Returns the merged instances and the share of detections whose outline was replaced."""
+    if not len(det) or not len(outline):
+        return det, 0.0
+    iou = box_iou(det.boxes, outline.boxes)
+    best = iou.argmax(1)
+    swap = iou[np.arange(len(det)), best] >= min_iou
+    boxes, masks = det.boxes.copy(), det.masks.copy()
+    if outline.masks.shape[1:] != masks.shape[1:]:
+        raise ValueError("mask sizes differ")
+    boxes[swap] = outline.boxes[best[swap]]
+    masks[swap] = outline.masks[best[swap]]
+    return Instances(boxes, det.scores.copy(), masks), float(swap.mean())
+
+
 def to_prob_map(inst: Instances, shape: tuple[int, int] = (2048, 2048), min_score: float = 0.05) -> np.ndarray:
     """A probability map from detections: each soft mask resized into its box and weighted by the detection score;
     the maximum where detections overlap. Lets instance models join probability-map ensembles."""
