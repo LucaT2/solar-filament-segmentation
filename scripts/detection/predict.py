@@ -16,6 +16,7 @@ scripts/evaluation/compare.py and scripts/postprocess/make_submission.py work on
 Usage:
     python scripts/detection/predict.py --exp maskrcnn_r50_v2 --folds 0              # fold-0 model -> test/
     python scripts/detection/predict.py --exp maskrcnn_r50_v2 --split oof
+    python scripts/detection/predict.py --exp maskrcnn_r50_v2 --split oof --tta 8 --out oof_tta8
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from filament.data.folds import load_folds
 from filament.detection.dataset import full_image_input
 from filament.detection.instances import Instances, save_instances
 from filament.detection.model import predict_instances
+from filament.detection.tta import predict_tta
 from filament.detection.train import build_from_config, guide_dir
 from filament.paths import get_data_paths, resolve_exp_dir
 from filament.segmentation.dataset import image_info
@@ -75,6 +77,8 @@ def main() -> None:
     parser.add_argument("--out", help="output sub-folder of outputs/<exp>/ (default: the split name)")
     parser.add_argument("--guide-maps", help="for guided models: sub-folder of the guide experiment with the maps "
                                              "(default: oof/, or the config's guide_test_maps for the test set)")
+    parser.add_argument("--tta", type=int, choices=[1, 2, 4, 8], default=1,
+                        help="views per image: flips (4) and transposed flips (8), merged per filament")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -105,8 +109,9 @@ def main() -> None:
             print(f"guide maps: {guides}")
         for path in tqdm(images, desc=args.split):
             x = full_image_input(image_info(path), guides)
-            save_instances(out_dir, path.stem, pooled([predict_instances(m, x, device, dtype, cfg.get("scale", 1.0))
-                                                            for m in models]))
+            save_instances(out_dir, path.stem, pooled([
+                predict_tta(lambda v: predict_instances(m, v, device, dtype, cfg.get("scale", 1.0)), x, args.tta)
+                for m in models]))
         n += len(images)
     print(f"{n} {args.split} predictions in {time.time() - t0:.0f}s -> {out_dir}")
 

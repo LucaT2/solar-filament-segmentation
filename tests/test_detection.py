@@ -279,3 +279,40 @@ def test_maskrcnn_trains_and_predicts_raw_instances():
                              torch.device("cpu"))
     assert inst.boxes.shape == (len(inst), 4) and inst.masks.shape[1:] == (28, 28)
     assert inst.masks.dtype == np.float16 and (inst.boxes[:, 2:] <= 256 + 1e-3).all()
+
+
+def _fake_detector(view):
+    """Detects the bright pixels of a (view of an) image as one instance, as Mask R-CNN would: box + 28 x 28 mask."""
+    from filament.detection.instances import Instances
+    import cv2 as _cv2
+    ys, xs = np.nonzero(view > 0.5)
+    box = np.array([xs.min(), ys.min(), xs.max() + 1, ys.max() + 1], np.float32)
+    crop = view[int(box[1]):int(box[3]), int(box[0]):int(box[2])].astype(np.float32)
+    mask = _cv2.resize(crop, (28, 28), interpolation=_cv2.INTER_AREA)
+    return Instances(box[None], np.array([0.9], np.float32), mask[None].astype(np.float16))
+
+
+@pytest.mark.parametrize("n_views", [1, 2, 4, 8])
+def test_tta_views_map_back_to_the_original_image(n_views):
+    from filament.detection.tta import VIEWS, predict_tta, unview_instances, view_image
+    x = np.zeros((96, 128), np.float32)
+    x[10:30, 20:80] = 1  # an asymmetric "L": a bar and a leg
+    x[30:70, 20:35] = 1
+    ref = _fake_detector(x)
+    for v in VIEWS[n_views]:
+        back = unview_instances(_fake_detector(view_image(x, v)), v, x.shape)
+        np.testing.assert_allclose(back.boxes, ref.boxes, atol=1e-4)
+        np.testing.assert_allclose(back.masks.astype(np.float32), ref.masks.astype(np.float32), atol=2e-3)
+    merged = predict_tta(_fake_detector, x, n_views)
+    assert len(merged) == 1 and merged.scores[0] == pytest.approx(0.9, abs=1e-6)
+    np.testing.assert_allclose(merged.boxes, ref.boxes, atol=1e-3)
+    np.testing.assert_allclose(merged.masks.astype(np.float32), ref.masks.astype(np.float32), atol=2e-2)
+
+
+def test_tta_scores_down_detections_missing_from_some_views():
+    from filament.detection.instances import Instances
+    from filament.detection.tta import merge_views
+    a = _fake_detector(np.pad(np.ones((20, 40), np.float32), 20))
+    far = Instances(a.boxes + 500, a.scores.copy(), a.masks.copy())
+    merged = merge_views([a, a, far, Instances.empty()])
+    assert sorted(np.round(merged.scores, 4)) == [0.225, 0.45]

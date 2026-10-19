@@ -210,7 +210,8 @@ ConvNeXt U-Net 0.422 (0.439 with classifier), U-Net ensemble + classifier 0.449:
 | – | Whole backbone (trainable_layers 5, lr × 0.25), guided Mask R-CNN, 3-detector average, fusion classifier | 0.446 / 0.438 / 0.450 / ≤ +0.005 | tried (see experiment log) |
 | Bet 2 | Mask R-CNN at 1.5× / 2× input resolution; 1× detections + 2× outlines | 0.446 / 0.431; hybrid 0.451 (LB 0.38), in the combination 0.451 (LB 0.39) | tried — outlines better, detection worse |
 | A2 (bet 1) | Semi-supervised: students on 3,251 pseudo-labelled frames (cut-off 0.6 / 0.5) | 0.447 / 0.448 (LB 0.38 both); finer grid, nested: 0.451 / 0.444 vs reference 0.444. With the U-Net + classifier (nested): 0.6 student 0.456, 0.5 student 0.451, both students 0.459, reference + 0.6 0.461 (`outputs/submission_ens_unet_det2.csv`, 1,264 filaments: **LB 0.39**), reference + both 0.453, 0.6 with detections scored ≥0.5 / ≥0.75 0.452 / 0.455 (without the classifier 0.454, the best so far) — best combination stays 0.461 | tried — detector alone +0.007, gone in the combination; parked |
-| A3, A4, B2, B4, C1–C3, D1, D2, D4 | — | — | not tried yet |
+| D1 | Mask R-CNN TTA (`filament.detection.tta`, `predict.py --tta 8`): flips + transposes, detections matched across views (box IoU ≥ 0.55), mean box / mask, score = sum / views; on the 0.6 student | alone, nested: 1 / 4 / 8 views 0.451 / 0.455 / **0.460**; paired 8 vs 1 view +0.011 [+0.002, +0.019], P 0.99 (RQ +0.013, better at 5 of 6 sites). U-Net + (reference + student TTA) + classifier **0.465** (vs 0.461); U-Net + student TTA 0.460 (0.3 / 0.7 weights 0.459). `outputs/submission_ens_unet_det2_tta.csv`, 1,310 filaments | tried — **gain**; use in the final (TTA the reference too: its checkpoint is not local) |
+| A3, A4, B2, B4, C1–C3, D2, D4 | — | — | not tried yet |
 
 **A. Data (new information)**
 - [x] **A1 — Neighbouring GONG frames as training data** *(tried 2026-10-18: no gain; parked)*. ~4 frames per training image (±2, ±5 min,
