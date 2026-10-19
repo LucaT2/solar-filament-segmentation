@@ -289,6 +289,7 @@ ConvNeXt U-Net 0.422 (0.439 with classifier), U-Net ensemble + classifier 0.449:
       cut-off 0.5 0.448 (+0.0015 [−0.008, +0.010]) vs 0.446; FP/FN and found rate per size unchanged; best validation
       PQ slightly higher (0.444 vs 0.436). The students saw half as many real crops and still matched the reference.
       In the combination: U-Net + student 0.456, U-Net + mean(reference, student) 0.461 (= best). → tie; parked.
+      LB 0.38 for both students (= reference).
       Possible follow-up: keep the full real exposure (4,000 crops per epoch, half pseudo; ~2× training time).
 
 **C. New architectures (parked)**
