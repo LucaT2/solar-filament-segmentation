@@ -208,7 +208,9 @@ ConvNeXt U-Net 0.422 (0.439 with classifier), U-Net ensemble + classifier 0.449:
 | B3 | Dice term in the mask loss (20 epochs) | 0.446 (−0.001); SQ +0.002 | tried — tie |
 | D3 | Map average U-Net ensemble + Mask R-CNN + classifier | **0.461**, LB **0.39** (with cascade 0.460, LB 0.38) | tried — **best; final recipe** |
 | – | Whole backbone (trainable_layers 5, lr × 0.25), guided Mask R-CNN, 3-detector average, fusion classifier | 0.446 / 0.438 / 0.450 / ≤ +0.005 | tried (see experiment log) |
-| A2, A3, A4, B2, B4, C1–C3, D1, D2, D4 | — | — | not tried yet |
+| Bet 2 | Mask R-CNN at 1.5× / 2× input resolution; 1× detections + 2× outlines | 0.446 / 0.431; hybrid 0.451 (LB 0.38), in the combination 0.451 (LB 0.39) | tried — outlines better, detection worse |
+| A2 (bet 1) | Semi-supervised: students on 3,251 pseudo-labelled frames (cut-off 0.6 / 0.5) | 0.447 / 0.448; in the combination 0.456–0.461 | tried — tie; parked |
+| A3, A4, B2, B4, C1–C3, D1, D2, D4 | — | — | not tried yet |
 
 **A. Data (new information)**
 - [x] **A1 — Neighbouring GONG frames as training data** *(tried 2026-10-18: no gain; parked)*. ~4 frames per training image (±2, ±5 min,
@@ -283,6 +285,11 @@ ConvNeXt U-Net 0.422 (0.439 with classifier), U-Net ensemble + classifier 0.449:
       8,199 annotated filaments), 2,686 unsure (0.3–0.6), 3,214 background; median 1 confident per frame. Archive
       frames carry text/logo outside the disk → blanked for the student. Private dataset
       `tasadanluca/solar-filament-pseudo`. Screen: students with cut-off 0.6 (GPU 0) and 0.5 (GPU 1).
+      **Result (2026-10-19, fold 0, 32 epochs, 50% pseudo crops):** cut-off 0.6 0.447 (+0.001 [−0.008, +0.010]),
+      cut-off 0.5 0.448 (+0.0015 [−0.008, +0.010]) vs 0.446; FP/FN and found rate per size unchanged; best validation
+      PQ slightly higher (0.444 vs 0.436). The students saw half as many real crops and still matched the reference.
+      In the combination: U-Net + student 0.456, U-Net + mean(reference, student) 0.461 (= best). → tie; parked.
+      Possible follow-up: keep the full real exposure (4,000 crops per epoch, half pseudo; ~2× training time).
 
 **C. New architectures (parked)**
 - C1 Mask2Former: 1/4-resolution masks vs 8 px filaments, slow convergence, ~2 days → parked.
