@@ -209,7 +209,7 @@ ConvNeXt U-Net 0.422 (0.439 with classifier), U-Net ensemble + classifier 0.449:
 | D3 | Map average U-Net ensemble + Mask R-CNN + classifier | **0.461**, LB **0.39** (with cascade 0.460, LB 0.38) | tried — **best; final recipe** |
 | – | Whole backbone (trainable_layers 5, lr × 0.25), guided Mask R-CNN, 3-detector average, fusion classifier | 0.446 / 0.438 / 0.450 / ≤ +0.005 | tried (see experiment log) |
 | Bet 2 | Mask R-CNN at 1.5× / 2× input resolution; 1× detections + 2× outlines | 0.446 / 0.431; hybrid 0.451 (LB 0.38), in the combination 0.451 (LB 0.39) | tried — outlines better, detection worse |
-| A2 (bet 1) | Semi-supervised: students on 3,251 pseudo-labelled frames (cut-off 0.6 / 0.5) | 0.447 / 0.448; in the combination 0.456–0.461 | tried — tie; parked |
+| A2 (bet 1) | Semi-supervised: students on 3,251 pseudo-labelled frames (cut-off 0.6 / 0.5) | 0.447 / 0.448 (LB 0.38 both); finer grid, nested: 0.451 / 0.444 vs reference 0.444. With the U-Net + classifier (nested): 0.6 student 0.456, 0.5 student 0.451, both students 0.459, reference + 0.6 0.461, reference + both 0.453, 0.6 with detections scored ≥0.5 / ≥0.75 0.452 / 0.455 (without the classifier 0.454, the best so far) — best combination stays 0.461 | tried — detector alone +0.007, gone in the combination; parked |
 | A3, A4, B2, B4, C1–C3, D1, D2, D4 | — | — | not tried yet |
 
 **A. Data (new information)**
