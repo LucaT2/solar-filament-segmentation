@@ -32,7 +32,7 @@ from filament.paths import get_data_paths, get_output_dir
 from filament.postprocess.components import find_components
 from filament.postprocess.maps import save_prob
 from filament.segmentation.dataset import CropDataset, build_augment, image_info, normalize_with
-from filament.segmentation.model import SegLoss, build_model, predict_full
+from filament.segmentation.model import SegLoss, build_model, n_outputs, predict_full
 from filament.tracking import start_run
 
 
@@ -56,6 +56,10 @@ class TrainConfig:
     dice_weight: float = 1.0
     skel_weight: float = 0.0  # Skeleton Recall loss weight (0 = off)
     skel_radius: int = 2  # thickness of the tubed skeleton (diamond dilation radius, px)
+    boundary_weight: float = 0.0  # > 0: second output channel predicts the mask's boundary band (training signal only)
+    boundary_width: int = 3  # dilation / erosion kernel of the boundary band (band = width - 1 px across each outline)
+    thin_weight: float = 0.0  # > 0: thin mask pixels (removed by a thin_kernel opening) weigh 1 + this in the mask loss
+    thin_kernel: int = 7
     target_mode: str = "random"  # random: one annotator's mask per sample | consensus: average of all annotators
     neighbours: str | None = None  # aligned neighbouring GONG frames (filament.data.neighbours) used as training images
     neighbour_p: float = 0.5  # probability that a training crop comes from a neighbour instead of the image itself
@@ -171,7 +175,8 @@ def run(cfg: TrainConfig, fold: int) -> dict:
                         pin_memory=True, drop_last=True, persistent_workers=cfg.num_workers > 0)
     gt = GroundTruth(ann, val_stems) if val_stems else None
 
-    model = build_model(cfg.arch, cfg.encoder, cfg.pretrained, decoder_fp32=cfg.decoder_fp32).to(device)
+    model = build_model(cfg.arch, cfg.encoder, cfg.pretrained, decoder_fp32=cfg.decoder_fp32,
+                        classes=n_outputs(asdict(cfg))).to(device)
     encoder_ids = {id(p) for p in model.encoder.parameters()}
     param_groups = [
         {"params": [p for p in model.parameters() if id(p) in encoder_ids], "lr": cfg.lr * cfg.encoder_lr_mult},
@@ -180,7 +185,8 @@ def run(cfg: TrainConfig, fold: int) -> dict:
     opt = torch.optim.AdamW(param_groups, lr=cfg.lr, weight_decay=cfg.weight_decay)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda(cfg, len(loader)))
     scaler = torch.amp.GradScaler(enabled=cfg.amp == "fp16" and device.type == "cuda")
-    loss_fn = SegLoss(cfg.bce_weight, cfg.dice_weight, cfg.skel_weight)
+    loss_fn = SegLoss(cfg.bce_weight, cfg.dice_weight, cfg.skel_weight, boundary_weight=cfg.boundary_weight,
+                      boundary_width=cfg.boundary_width, thin_weight=cfg.thin_weight, thin_kernel=cfg.thin_kernel)
     dtype = amp_dtype(cfg.amp)
 
     # fold models: fold<k>.pt; full-data models (fold -1, no validation, last epoch): full_s<seed>.pt

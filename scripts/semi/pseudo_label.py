@@ -24,7 +24,7 @@ from filament.detection.train import build_from_config
 from filament.paths import resolve_exp_dir
 from filament.postprocess.pipeline import load_postprocess
 from filament.postprocess.rescoring import Rescorer
-from filament.segmentation.model import build_model
+from filament.segmentation.model import build_model, n_outputs
 from filament.semi.pseudo import Teacher
 
 UNETS = ["unet_r34_skel050/fold0.pt", "outputs/kaggle_runs/solar-filament-v2_rerun/unet_convnext_t_skel050/fold0.pt"]
@@ -34,7 +34,8 @@ DETECTOR = "outputs/kaggle_runs/solar-filament-v2_maskrcnn/maskrcnn_r50_v2_m56/f
 def load_unet(path: Path, device):
     state = torch.load(path, map_location=device)
     c = state["config"]
-    model = build_model(c["arch"], c["encoder"], pretrained=False, decoder_fp32=c.get("decoder_fp32", False))
+    model = build_model(c["arch"], c["encoder"], pretrained=False, decoder_fp32=c.get("decoder_fp32", False),
+                        classes=n_outputs(c))
     model.load_state_dict(state["model"])
     return model.to(device).eval(), c
 

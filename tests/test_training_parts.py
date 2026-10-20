@@ -123,3 +123,47 @@ def test_tiled_prediction_matches_full_image():
     full = predict_full([_Pointwise()], x, dev, amp_dtype=None)
     tiled = predict_full([_Pointwise()], x, dev, amp_dtype=None, tile=192, overlap=64)
     np.testing.assert_allclose(tiled, full, atol=1e-6)
+
+
+def _bar_with_barb():
+    m = torch.zeros(1, 1, 64, 64)
+    m[..., 20:36, 8:56] = 1  # a 16 px thick body
+    m[..., 36:50, 30:33] = 1  # a 3 px wide barb hanging off it
+    return m
+
+
+def test_boundary_and_thin_targets():
+    from filament.segmentation.model import boundary_target, thin_target
+    m = _bar_with_barb()
+    band = boundary_target(m, 3)
+    assert band[0, 0, 28, 30] == 0 and band[0, 0, 20, 30] == 1 and band[0, 0, 19, 30] == 1  # interior / edge / outside
+    assert band[0, 0, 40:50, 30:33].sum(-1).min() == 2  # a 3 px barb keeps its centre line with a 3 x 3 band ...
+    assert boundary_target(m, 5)[0, 0, 40:50, 30:33].min() == 1  # ... and is boundary throughout with 5 x 5
+    thin = thin_target(m, 7)
+    assert thin[0, 0, 40:50, 30:33].min() == 1 and thin[0, 0, 28, 30] == 0  # barb thin, body interior not
+    assert thin[..., 20:36, 8:56].sum() < 0.05 * 16 * 48  # (only the body's corners)
+    assert ((thin > 0) & (m == 0)).sum() == 0
+
+
+def test_boundary_head_and_thin_weight_losses():
+    from filament.segmentation.model import boundary_target
+    m = _bar_with_barb()
+    target = torch.cat([m, m], 1)  # [mask, skeleton] (skeleton unused here)
+    perfect_mask = (m * 2 - 1) * 20
+    plain = SegLoss()(perfect_mask, target)
+    assert SegLoss(thin_weight=4.0)(perfect_mask, target).item() == pytest.approx(plain.item(), abs=1e-4)
+    with_head = torch.cat([perfect_mask, (boundary_target(m) * 2 - 1) * 20], 1)
+    assert SegLoss(boundary_weight=0.5)(with_head, target).item() == pytest.approx(plain.item(), abs=1e-3)
+    wrong_head = torch.cat([perfect_mask, -20 * torch.ones_like(m)], 1)
+    assert SegLoss(boundary_weight=0.5)(wrong_head, target) > plain + 0.4
+    no_barb = perfect_mask.clone()
+    no_barb[..., 36:50, 30:33] = -20  # missing the barb costs more with thin weighting
+    assert SegLoss(thin_weight=4.0)(no_barb, target) > SegLoss()(no_barb, target) * 2
+
+
+def test_two_channel_model_predicts_the_mask_channel():
+    from filament.segmentation.model import build_model, n_outputs
+    model = build_model("Unet", "resnet34", pretrained=False, classes=n_outputs({"boundary_weight": 0.5})).eval()
+    assert model(torch.zeros(1, 1, 64, 64)).shape[1] == 2
+    prob = predict_full([model], np.zeros((64, 64), np.float32), torch.device("cpu"), amp_dtype=None)
+    assert prob.shape == (64, 64)

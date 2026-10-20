@@ -342,26 +342,22 @@ nbf.write(nbf.v4.new_notebook(cells=cells, metadata=META), REPO_ROOT / "notebook
 # Second notebook for a parallel session (Kaggle allows 2 GPU sessions at once): same code, different experiments.
 SCREEN_CONFIG = '''
 # ---- configuration ---------------------------------------------------------------------------------------
-# Bet 1, semi-supervised students (dataset solar-filament-pseudo must be attached): the whole-backbone Mask R-CNN
-# (fold 0, reference 0.446) with half of its training crops from ~3,250 pseudo-labelled GONG frames of new days.
-# * GPU 0: teacher candidates with P >= 0.6 as instances (crops touching 0.3 <= P < 0.6 redrawn)
-# * GPU 1: cut-off 0.5 (more pseudo-instances, more teacher errors)
-# Validation stays on the real fold-0 images. The reference is compared locally.
+# Fine structures (barbs, the organiser's first challenge): ConvNeXt-Tiny U-Net fold 0 (reference 0.422, 0.439 with
+# classifier), one change each:
+# * GPU 0 (E1): boundary head: a second output channel predicts the mask's 5x5 boundary band (whole barbs up to
+#   4 px wide), BCE + Dice, weight 0.5; prediction uses the mask channel only
+# * GPU 1 (E2): thin mask pixels (removed by a 7x7 opening) weighted 5x in the mask loss
+# Compared in-notebook with the ConvNeXt reference; barb coverage and the full combination are checked locally.
 EXPERIMENTS = [
-    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m56_ftall_pseudo.yaml",     "folds": [0], "full_seeds": [],
-     "overrides": ["max_hours=6.8"]},
-    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m56_ftall_pseudo_c05.yaml", "folds": [0], "full_seeds": [],
-     "overrides": ["max_hours=6.8"]},
+    {"config": "configs/segmentation/unet_convnext_t_skel050_bnd.yaml",  "folds": [0], "full_seeds": [], "overrides": []},
+    {"config": "configs/segmentation/unet_convnext_t_skel050_thin.yaml", "folds": [0], "full_seeds": [], "overrides": []},
 ]
 # attached inputs, matched by "<notebook>/<experiment>" in their path: this notebook's previous output
 # (Add Input -> Your Work -> Notebooks -> this notebook), holding ConvNeXt-Tiny + U-Net fold 0 and its OOF maps
 CHECKPOINT_DATASETS = ["solar-filament-v2/unet_convnext_t_skel050"]
-BASELINE = "unet_convnext_t_skel050"   # in-notebook reference; vs the Mask R-CNN reference (0.446): locally
+BASELINE = "unet_convnext_t_skel050"   # the ConvNeXt reference, same recipe without the new loss terms
 TTA = True                             # U-Net only: average 4 flips per model when predicting
-SUBMISSIONS = {                        # output name -> (experiment, [model names / glob patterns])
-    "maskrcnn_pseudo_fold0": ("maskrcnn_r50_v2_m56_ftall_pseudo", ["fold0"]),
-    "maskrcnn_pseudo_c05_fold0": ("maskrcnn_r50_v2_m56_ftall_pseudo_c05", ["fold0"]),
-}
+SUBMISSIONS = {}                       # none: test maps are made locally for the combination
 GITHUB_SECRET = "Github_key"           # label of the Kaggle secret holding the GitHub token
 WANDB_SECRET = "WANDB_API_KEY"         # label of the (optional) Kaggle secret holding the W&B API key
 REPO_URL = "github.com/LucaT2/solar-filament-segmentation.git"

@@ -37,18 +37,43 @@ def _flatten(obj):
 
 
 def build_model(arch: str = "Unet", encoder: str = "resnet34", pretrained: bool = True,
-                decoder_fp32: bool = False) -> nn.Module:
-    """Single-channel input (grayscale Hα), single-channel output (filament logit).
+                decoder_fp32: bool = False, classes: int = 1) -> nn.Module:
+    """Single-channel input (grayscale Hα); output channel 0 is the filament logit (``classes`` = 2 adds a boundary
+    logit, used only as a training signal: prediction reads channel 0).
 
     smp adapts the pretrained RGB stem to 1 input channel by summing its weights. ``decoder_fp32`` keeps the decoder
     in float32 under mixed precision (the encoder still runs in fp16), for decoders whose activations overflow fp16.
     """
     model = smp.create_model(
-        arch, encoder_name=encoder, encoder_weights="imagenet" if pretrained else None, in_channels=1, classes=1
+        arch, encoder_name=encoder, encoder_weights="imagenet" if pretrained else None, in_channels=1, classes=classes
     )
     if decoder_fp32:
         model.decoder.forward = _fp32_forward(model.decoder.forward)
     return model
+
+
+def n_outputs(cfg: dict) -> int:
+    """Output channels of a model trained with config ``cfg`` (2 with the boundary head)."""
+    return 2 if cfg.get("boundary_weight", 0) > 0 else 1
+
+
+def dilate(m: torch.Tensor, k: int) -> torch.Tensor:
+    return F.max_pool2d(m, k, stride=1, padding=k // 2)
+
+
+def erode(m: torch.Tensor, k: int) -> torch.Tensor:
+    return -F.max_pool2d(-m, k, stride=1, padding=k // 2)
+
+
+def boundary_target(mask: torch.Tensor, k: int = 3) -> torch.Tensor:
+    """The band where a k x k dilation and erosion of ``mask`` differ: (k - 1) px across each outline, and the whole
+    of any structure narrower than k px."""
+    return dilate(mask, k) - erode(mask, k)
+
+
+def thin_target(mask: torch.Tensor, k: int = 7) -> torch.Tensor:
+    """Mask pixels removed by a k x k opening: parts narrower than ~k px (barbs, thin ends)."""
+    return (mask - dilate(erode(mask, k), k)).clamp_min(0)
 
 
 class BCEDiceLoss(nn.Module):
@@ -56,36 +81,49 @@ class BCEDiceLoss(nn.Module):
         super().__init__()
         self.bce_weight, self.dice_weight, self.eps = bce_weight, dice_weight, eps
 
-    def forward(self, logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def forward(self, logits: torch.Tensor, target: torch.Tensor, weight: torch.Tensor | None = None) -> torch.Tensor:
+        """``weight``: optional per-pixel weights (same shape), applied to both terms."""
         logits = logits.float()
-        bce = F.binary_cross_entropy_with_logits(logits, target)
+        w = torch.ones_like(target) if weight is None else weight
+        bce = (F.binary_cross_entropy_with_logits(logits, target, reduction="none") * w).sum() / w.sum()
         prob = torch.sigmoid(logits)
-        inter = (prob * target).sum()
-        dice = 1 - (2 * inter + self.eps) / (prob.sum() + target.sum() + self.eps)  # batch-level soft Dice
+        inter = (w * prob * target).sum()
+        dice = 1 - (2 * inter + self.eps) / ((w * prob).sum() + (w * target).sum() + self.eps)  # batch-level soft Dice
         return self.bce_weight * bce + self.dice_weight * dice
 
 
 class SegLoss(nn.Module):
-    """BCE + Dice on the mask, plus (optionally) Skeleton Recall (Kirchhoff et al., ECCV 2024).
+    """BCE + Dice on the mask, plus (optionally) Skeleton Recall (Kirchhoff et al., ECCV 2024), a boundary head and
+    extra weight on thin structures.
 
     Skeleton Recall = 1 - (sum of predicted probability on the tubed skeleton) / (skeleton size), over the batch.
     It only rewards *covering* each filament's centre line, so dropping a faint middle stretch of a filament (which
     splits it into pieces) is penalized, while the mask loss still controls the outline.
+    ``boundary_weight`` > 0: logits channel 1 predicts ``boundary_target`` of the mask (BCE + Dice); the band covers
+    whole barbs, so the shared features must resolve outlines and thin structures.
+    ``thin_weight`` > 0: mask pixels in ``thin_target`` count 1 + thin_weight times in the mask loss.
     ``target`` is (B, 1, H, W) [mask] or (B, 2, H, W) [mask, tubed skeleton].
     """
 
-    def __init__(self, bce_weight: float = 1.0, dice_weight: float = 1.0, skel_weight: float = 0.0, eps: float = 1.0):
+    def __init__(self, bce_weight: float = 1.0, dice_weight: float = 1.0, skel_weight: float = 0.0, eps: float = 1.0,
+                 boundary_weight: float = 0.0, boundary_width: int = 3, thin_weight: float = 0.0, thin_kernel: int = 7):
         super().__init__()
         self.mask_loss = BCEDiceLoss(bce_weight, dice_weight, eps)
         self.skel_weight, self.eps = skel_weight, eps
+        self.boundary_weight, self.boundary_width = boundary_weight, boundary_width
+        self.thin_weight, self.thin_kernel = thin_weight, thin_kernel
 
     def forward(self, logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        loss = self.mask_loss(logits, target[:, :1])
+        mask = target[:, :1]
+        weight = 1 + self.thin_weight * thin_target(mask, self.thin_kernel) if self.thin_weight > 0 else None
+        loss = self.mask_loss(logits[:, :1], mask, weight)
         if self.skel_weight > 0:
             skel = target[:, 1:2]
-            prob = torch.sigmoid(logits.float())
+            prob = torch.sigmoid(logits[:, :1].float())
             recall = ((prob * skel).sum() + self.eps) / (skel.sum() + self.eps)
             loss = loss + self.skel_weight * (1 - recall)
+        if self.boundary_weight > 0:
+            loss = loss + self.boundary_weight * self.mask_loss(logits[:, 1:2], boundary_target(mask, self.boundary_width))
         return loss
 
 
@@ -113,7 +151,7 @@ def _forward_tiled(model: nn.Module, t: torch.Tensor, tile: int, overlap: int) -
     weight = _blend_window(tile, overlap, t.device)
     for y in ys:
         for x in xs:
-            out = torch.sigmoid(model(t[:, :, y : y + tile, x : x + tile]).float())
+            out = torch.sigmoid(model(t[:, :, y : y + tile, x : x + tile])[:, :1].float())
             acc[:, :, y : y + tile, x : x + tile] += out * weight
             norm[:, :, y : y + tile, x : x + tile] += weight
     return acc / norm.clamp_min(1e-6)
@@ -174,6 +212,6 @@ def predict_full(
                 if tile:
                     out = _forward_tiled(model, inp, tile, overlap)
                 else:
-                    out = torch.sigmoid(model(inp).float())
+                    out = torch.sigmoid(model(inp)[:, :1].float())
             acc += inv(out)
     return (acc / (len(models) * len(transforms)))[0, 0].cpu().numpy()

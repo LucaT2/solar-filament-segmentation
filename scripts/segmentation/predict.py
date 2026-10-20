@@ -29,7 +29,7 @@ from filament.data.images import read_image
 from filament.paths import get_data_paths, get_output_dir, resolve_exp_dir
 from filament.postprocess.maps import save_prob
 from filament.segmentation.dataset import image_info, normalize_with
-from filament.segmentation.model import build_model, predict_full
+from filament.segmentation.model import build_model, n_outputs, predict_full
 from filament.segmentation.train import amp_dtype
 
 
@@ -47,7 +47,8 @@ def load_models(ckpts, device):
     for path in ckpts:
         state = torch.load(path, map_location=device)
         cfg = state["config"]
-        model = build_model(cfg["arch"], cfg["encoder"], pretrained=False, decoder_fp32=cfg.get("decoder_fp32", False))
+        model = build_model(cfg["arch"], cfg["encoder"], pretrained=False, decoder_fp32=cfg.get("decoder_fp32", False),
+                            classes=n_outputs(cfg))
         model.load_state_dict(state["model"])
         models.append(model.to(device).eval())
         print(f"loaded {path.name} (epoch {state.get('epoch')}, val PQ {state.get('val_pq', float('nan')):.4f})")

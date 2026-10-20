@@ -1,0 +1,32 @@
+# Fine structures (E1): ConvNeXt reference + boundary head. Channel 1 predicts the mask's boundary band (5x5
+# dilation - erosion: 4 px across each outline, whole barbs up to 4 px wide), BCE + Dice, weight 0.5; prediction uses channel 0 only.
+name: unet_convnext_t_skel050_bnd
+arch: Unet
+encoder: tu-convnext_tiny
+pretrained: true
+crop: 512
+batch_size: 16
+epochs: 30
+samples_per_epoch: 4000
+pos_fraction: 0.7
+augment: base
+lr: 0.0007
+encoder_lr_mult: 0.25
+weight_decay: 0.0001
+warmup_epochs: 2
+bce_weight: 1.0
+dice_weight: 1.0
+skel_weight: 0.5
+skel_radius: 1
+target_mode: random
+amp: fp16
+num_workers: 4
+val_every: 2
+val_thresholds: [0.6, 0.7, 0.8, 0.9]
+val_min_area: 50
+seed: 42
+wandb: auto
+wandb_project: null
+wandb_entity: null
+boundary_weight: 0.5
+boundary_width: 5
