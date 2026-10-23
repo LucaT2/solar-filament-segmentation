@@ -40,14 +40,10 @@ code("""
 # ---- configuration ---------------------------------------------------------------------------------------
 # Each experiment: a config from the repo, the folds to train (cross-validation, with validation) and/or seeds of
 # full-data models (all 707 images, no validation). Jobs of all experiments are spread over the GPUs.
-EXPERIMENTS = [   # final stage, completing both halves of the combination ("gpus": the GPU of each fold):
-    # * GPU 0: whole-backbone Mask R-CNN fold 0 (~5.2 h; folds 1-4 trained 2026-10-23, the original fold-0
-    #   checkpoint is lost), then ConvNeXt-Tiny U-Net fold 1 (~1.7 h)
-    # * GPU 1: ConvNeXt-Tiny U-Net folds 2, 3, 4 (~5.1 h; fold 0 exists)
-    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m56_ftall.yaml", "folds": [0], "gpus": [0],
-     "full_seeds": [], "overrides": ["max_hours=6.0"]},
-    {"config": "configs/segmentation/unet_convnext_t_skel050.yaml", "folds": [1, 2, 3, 4], "gpus": [0, 1, 1, 1],
-     "full_seeds": [], "overrides": []},
+EXPERIMENTS = [   # final stage: ConvNeXt-Tiny U-Net folds 1-4 (fold 0 exists), ~1.7 h each: GPU 0 folds 1, 3;
+    # GPU 1 folds 2, 4. (Whole-backbone Mask R-CNN: all 5 folds exist.)
+    {"config": "configs/segmentation/unet_convnext_t_skel050.yaml", "folds": [1, 2, 3, 4], "full_seeds": [],
+     "overrides": []},
 ]
 # attached inputs with earlier experiment results, matched by "<notebook>/<experiment>" in their path
 # (Add Input -> Your Work -> Notebooks); none needed: OOF predictions with TTA, tuning on all folds and the test
