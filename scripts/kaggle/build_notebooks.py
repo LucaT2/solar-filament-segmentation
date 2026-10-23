@@ -40,10 +40,14 @@ code("""
 # ---- configuration ---------------------------------------------------------------------------------------
 # Each experiment: a config from the repo, the folds to train (cross-validation, with validation) and/or seeds of
 # full-data models (all 707 images, no validation). Jobs of all experiments are spread over the GPUs.
-EXPERIMENTS = [   # final stage: ConvNeXt-Tiny U-Net folds 1-4 (fold 0 exists), ~1.7 h each: GPU 0 folds 1, 3;
-    # GPU 1 folds 2, 4. (Whole-backbone Mask R-CNN folds 1-4 were trained on 2026-10-23.)
-    {"config": "configs/segmentation/unet_convnext_t_skel050.yaml", "folds": [1, 2, 3, 4], "full_seeds": [],
-     "overrides": []},
+EXPERIMENTS = [   # final stage, completing both halves of the combination ("gpus": the GPU of each fold):
+    # * GPU 0: whole-backbone Mask R-CNN fold 0 (~5.2 h; folds 1-4 trained 2026-10-23, the original fold-0
+    #   checkpoint is lost), then ConvNeXt-Tiny U-Net fold 1 (~1.7 h)
+    # * GPU 1: ConvNeXt-Tiny U-Net folds 2, 3, 4 (~5.1 h; fold 0 exists)
+    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m56_ftall.yaml", "folds": [0], "gpus": [0],
+     "full_seeds": [], "overrides": ["max_hours=6.0"]},
+    {"config": "configs/segmentation/unet_convnext_t_skel050.yaml", "folds": [1, 2, 3, 4], "gpus": [0, 1, 1, 1],
+     "full_seeds": [], "overrides": []},
 ]
 # attached inputs with earlier experiment results, matched by "<notebook>/<experiment>" in their path
 # (Add Input -> Your Work -> Notebooks); none needed: OOF predictions with TTA, tuning on all folds and the test
@@ -201,21 +205,25 @@ through its list in one background process. Logs: `/kaggle/working/train_gpu<k>.
 """)
 code("""
 n_gpu = max(torch.cuda.device_count(), 1)
-jobs = []
+jobs = []   # (pinned GPU or None, command)
 for e in EXPERIMENTS:
     over = list(e["overrides"])
     # two training processes share Kaggle's 4 CPU cores: 2 data-loading workers each unless overridden
     if n_gpu > 1 and not any(o.startswith("num_workers") for o in over):
         over.append("num_workers=2")
     train = f"scripts/{e['kind']}/train.py"
-    for k in e["folds"]:
-        jobs.append([train, "--config", e["config"], "--fold", str(k)] + (["--set", *over] if over else []))
+    gpus = e.get("gpus") or [None] * len(e["folds"])   # optional: the GPU of each fold, to balance long jobs
+    for k, g in zip(e["folds"], gpus):
+        jobs.append((g, [train, "--config", e["config"], "--fold", str(k)] + (["--set", *over] if over else [])))
     for s in e["full_seeds"]:
-        jobs.append([train, "--config", e["config"], "--fold", "-1", "--set", *over, f"seed={s}"])
+        jobs.append((None, [train, "--config", e["config"], "--fold", "-1", "--set", *over, f"seed={s}"]))
+# pinned jobs go to their GPU; the others are dealt out in turn
+free = [j for g, j in jobs if g is None]
+per_gpu = {gpu: [j for g, j in jobs if g is not None and g % n_gpu == gpu] + free[gpu::n_gpu] for gpu in range(n_gpu)}
 
 procs = []
 for gpu in range(n_gpu):
-    my_jobs = jobs[gpu::n_gpu]
+    my_jobs = per_gpu[gpu]
     if not my_jobs:
         continue
     script = " && ".join(subprocess.list2cmdline(["python", "-W", "ignore", *j]) for j in my_jobs)
