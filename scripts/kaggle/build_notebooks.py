@@ -40,11 +40,10 @@ code("""
 # ---- configuration ---------------------------------------------------------------------------------------
 # Each experiment: a config from the repo, the folds to train (cross-validation, with validation) and/or seeds of
 # full-data models (all 707 images, no validation). Jobs of all experiments are spread over the GPUs.
-EXPERIMENTS = [   # final stage: whole-backbone Mask R-CNN folds 1 (GPU 0) and 2 (GPU 1), ~5.2 h each; folds 3, 4 run
-    # in the screen notebook at the same time. max_hours stops a fold early (keeping its best checkpoint) before the
-    # weekly quota runs out. ConvNeXt U-Net folds 1-4 follow in a later session (~1.7 h each).
-    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m56_ftall.yaml", "folds": [1, 2], "full_seeds": [],
-     "overrides": ["max_hours=5.6"]},
+EXPERIMENTS = [   # final stage: ConvNeXt-Tiny U-Net folds 1-4 (fold 0 exists), ~1.7 h each: GPU 0 folds 1, 3;
+    # GPU 1 folds 2, 4. (Whole-backbone Mask R-CNN folds 1-4 were trained on 2026-10-23.)
+    {"config": "configs/segmentation/unet_convnext_t_skel050.yaml", "folds": [1, 2, 3, 4], "full_seeds": [],
+     "overrides": []},
 ]
 # attached inputs with earlier experiment results, matched by "<notebook>/<experiment>" in their path
 # (Add Input -> Your Work -> Notebooks); none needed: OOF predictions with TTA, tuning on all folds and the test
