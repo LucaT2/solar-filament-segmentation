@@ -40,19 +40,19 @@ code("""
 # ---- configuration ---------------------------------------------------------------------------------------
 # Each experiment: a config from the repo, the folds to train (cross-validation, with validation) and/or seeds of
 # full-data models (all 707 images, no validation). Jobs of all experiments are spread over the GPUs.
-EXPERIMENTS = [   # fold-0 screen of the transformer encoder MiT-B2, one per GPU
-    {"config": "configs/segmentation/unet_mitb2_skel050.yaml",      "folds": [0], "full_seeds": [], "overrides": []},  # + U-Net
-    {"config": "configs/segmentation/archive/segformer_mitb2_skel050.yaml", "folds": [0], "full_seeds": [], "overrides": []},  # SegFormer
+EXPERIMENTS = [   # final stage: whole-backbone Mask R-CNN folds 1 (GPU 0) and 2 (GPU 1), ~5.2 h each; folds 3, 4 run
+    # in the screen notebook at the same time. max_hours stops a fold early (keeping its best checkpoint) before the
+    # weekly quota runs out. ConvNeXt U-Net folds 1-4 follow in a later session (~1.7 h each).
+    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m56_ftall.yaml", "folds": [1, 2], "full_seeds": [],
+     "overrides": ["max_hours=5.6"]},
 ]
 # attached inputs with earlier experiment results, matched by "<notebook>/<experiment>" in their path
-# (Add Input -> Your Work -> Notebooks): the screen notebook's output, holding ConvNeXt-Tiny + U-Net fold 0
-CHECKPOINT_DATASETS = ["solar-filament-v2/unet_convnext_t_skel050"]
-BASELINE = "unet_convnext_t_skel050"   # current best fold-0 model
-TTA = True                             # average 4 flips per model when predicting
-SUBMISSIONS = {                        # output name -> (experiment, [model names / glob patterns])
-    "unet_mitb2_fold0": ("unet_mitb2_skel050", ["fold0"]),
-    "segformer_mitb2_fold0": ("segformer_mitb2_skel050", ["fold0"]),
-}
+# (Add Input -> Your Work -> Notebooks); none needed: OOF predictions with TTA, tuning on all folds and the test
+# predictions are made locally from the downloaded checkpoints
+CHECKPOINT_DATASETS = []
+BASELINE = "none"                      # no in-notebook comparison (each fold has its own validation images)
+TTA = True                             # U-Net only: average 4 flips per model when predicting
+SUBMISSIONS = {}                       # none: the final combination is built locally
 GITHUB_SECRET = "Github_key"           # label of the Kaggle secret holding the GitHub token
 WANDB_SECRET = "WANDB_API_KEY"         # label of the (optional) Kaggle secret holding the W&B API key
 REPO_URL = "github.com/LucaT2/solar-filament-segmentation.git"
@@ -342,22 +342,18 @@ nbf.write(nbf.v4.new_notebook(cells=cells, metadata=META), REPO_ROOT / "notebook
 # Second notebook for a parallel session (Kaggle allows 2 GPU sessions at once): same code, different experiments.
 SCREEN_CONFIG = '''
 # ---- configuration ---------------------------------------------------------------------------------------
-# Fine structures (barbs, the organiser's first challenge): ConvNeXt-Tiny U-Net fold 0 (reference 0.422, 0.439 with
-# classifier), one change each:
-# * GPU 0 (E1): boundary head: a second output channel predicts the mask's 5x5 boundary band (whole barbs up to
-#   4 px wide), BCE + Dice, weight 0.5; prediction uses the mask channel only
-# * GPU 1 (E2): thin mask pixels (removed by a 7x7 opening) weighted 5x in the mask loss
-# Compared in-notebook with the ConvNeXt reference; barb coverage and the full combination are checked locally.
+# Final stage, second session: whole-backbone Mask R-CNN folds 3 (GPU 0) and 4 (GPU 1), ~5.2 h each; folds 1, 2 run
+# in the main notebook at the same time. max_hours stops a fold early (keeping its best checkpoint) before the
+# weekly quota runs out. ConvNeXt U-Net folds 1-4 follow in a later session (~1.7 h each).
 EXPERIMENTS = [
-    {"config": "configs/segmentation/unet_convnext_t_skel050_bnd.yaml",  "folds": [0], "full_seeds": [], "overrides": []},
-    {"config": "configs/segmentation/unet_convnext_t_skel050_thin.yaml", "folds": [0], "full_seeds": [], "overrides": []},
+    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m56_ftall.yaml", "folds": [3, 4], "full_seeds": [],
+     "overrides": ["max_hours=5.6"]},
 ]
-# attached inputs, matched by "<notebook>/<experiment>" in their path: this notebook's previous output
-# (Add Input -> Your Work -> Notebooks -> this notebook), holding ConvNeXt-Tiny + U-Net fold 0 and its OOF maps
-CHECKPOINT_DATASETS = ["solar-filament-v2/unet_convnext_t_skel050"]
-BASELINE = "unet_convnext_t_skel050"   # the ConvNeXt reference, same recipe without the new loss terms
+# attached inputs, matched by "<notebook>/<experiment>" in their path; none needed (everything else is local)
+CHECKPOINT_DATASETS = []
+BASELINE = "none"                      # no in-notebook comparison (each fold has its own validation images)
 TTA = True                             # U-Net only: average 4 flips per model when predicting
-SUBMISSIONS = {}                       # none: test maps are made locally for the combination
+SUBMISSIONS = {}                       # none: the final combination is built locally
 GITHUB_SECRET = "Github_key"           # label of the Kaggle secret holding the GitHub token
 WANDB_SECRET = "WANDB_API_KEY"         # label of the (optional) Kaggle secret holding the W&B API key
 REPO_URL = "github.com/LucaT2/solar-filament-segmentation.git"
