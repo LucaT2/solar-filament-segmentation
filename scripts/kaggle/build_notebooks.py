@@ -186,10 +186,26 @@ def kind_of(exp):
     cfg = WORK / exp / "config.yaml"
     return yaml.safe_load(cfg.read_text()).get("kind", "segmentation") if cfg.exists() else "segmentation"
 
-if any(e["kind"] == "detection" for e in EXPERIMENTS):   # download the COCO weights once, before parallel jobs
+def det_config(e):
+    return {**yaml.safe_load((REPO / e["config"]).read_text()),
+            **{o.split("=", 1)[0]: yaml.safe_load(o.split("=", 1)[1]) for o in e["overrides"]}}
+
+# download the COCO weights once, before parallel jobs
+if any(e["kind"] == "detection" and det_config(e).get("arch", "maskrcnn") != "mask2former" for e in EXPERIMENTS):
     from torchvision.models.detection import MaskRCNN_ResNet50_FPN_V2_Weights
     MaskRCNN_ResNet50_FPN_V2_Weights.DEFAULT.get_state_dict(progress=False)
     log("Mask R-CNN COCO weights downloaded")
+for e in EXPERIMENTS:   # Mask2Former (preinstalled transformers): weights + one tiny training step on the CPU, so an
+    c = det_config(e) if e["kind"] == "detection" else {}   # API mismatch fails here, not hours into the run
+    if c.get("arch") == "mask2former":
+        import transformers
+        from filament.detection.mask2former import Mask2FormerDetector
+        m2f = Mask2FormerDetector(c["checkpoint"], mask_size=32).train()
+        target = {"labels": torch.ones(1, dtype=torch.int64), "masks": torch.zeros(1, 128, 128, dtype=torch.uint8)}
+        target["masks"][0, 50:58, 20:100] = 1
+        sum(m2f([torch.randn(3, 128, 128)], [target]).values()).backward()
+        del m2f
+        log(f"Mask2Former {c['checkpoint']} downloaded and checked (transformers {transformers.__version__})")
 log("setup done")
 """)
 
@@ -290,7 +306,7 @@ for e in EXPERIMENTS:
     else:   # thresholds = mask threshold, min-scores = detection-score cut-off
         !python -W ignore scripts/postprocess/tune_postprocess.py --exp {name} --workers 4 --fold {all_folds} \\
             --thresholds 0.3 0.4 0.5 0.6 0.7 --min-areas 0 100 200 300 400 \\
-            --min-scores 0.3 0.4 0.5 0.6 0.7 0.8 0.9
+            --min-scores 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9
     if (WORK / BASELINE / "oof").is_dir():
         print("--- vs baseline, each with its own tuned post-processing:")
         !python -W ignore scripts/evaluation/compare.py --a {WORK / BASELINE} --b {WORK / name} --folds {all_folds}
@@ -345,12 +361,14 @@ nbf.write(nbf.v4.new_notebook(cells=cells, metadata=META), REPO_ROOT / "notebook
 # Second notebook for a parallel session (Kaggle allows 2 GPU sessions at once): same code, different experiments.
 SCREEN_CONFIG = '''
 # ---- configuration ---------------------------------------------------------------------------------------
-# Final stage, second session: whole-backbone Mask R-CNN folds 3 (GPU 0) and 4 (GPU 1), ~5.2 h each; folds 1, 2 run
-# in the main notebook at the same time. max_hours stops a fold early (keeping its best checkpoint) before the
-# weekly quota runs out. ConvNeXt U-Net folds 1-4 follow in a later session (~1.7 h each).
+# Fold-0 screen: Mask2Former, Swin-T (GPU 0) and Swin-S (GPU 1), vs the whole-backbone Mask R-CNN's fold 0 (compared
+# locally). ~30-35 min per epoch on a T4; after epoch 1 each run shortens its schedule to what fits in max_hours 5.6
+# (fit_epochs), so expect ~9-10 epochs and a ~5.6 h session.
 EXPERIMENTS = [
-    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m56_ftall.yaml", "folds": [3, 4], "full_seeds": [],
-     "overrides": ["max_hours=5.6"]},
+    {"config": "configs/detection/mask2former/mask2former_swin_t.yaml", "folds": [0], "full_seeds": [],
+     "overrides": [], "gpus": [0]},
+    {"config": "configs/detection/mask2former/mask2former_swin_s.yaml", "folds": [0], "full_seeds": [],
+     "overrides": [], "gpus": [1]},
 ]
 # attached inputs, matched by "<notebook>/<experiment>" in their path; none needed (everything else is local)
 CHECKPOINT_DATASETS = []

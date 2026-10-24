@@ -281,6 +281,49 @@ def test_maskrcnn_trains_and_predicts_raw_instances():
     assert inst.masks.dtype == np.float16 and (inst.boxes[:, 2:] <= 256 + 1e-3).all()
 
 
+def test_mask2former_queries_become_instances_on_their_masks():
+    from filament.detection.instances import paste_mask
+    from filament.detection.mask2former import queries_to_instances
+
+    logits = torch.full((3, 64, 64), -10.0)  # an image of 256 px, masks at 1/4 resolution
+    logits[0, 10:14, 5:45] = 10  # a filament: rows 40-55, columns 20-179 at full resolution
+    logits[1, 30:40, 30:40] = 10  # confident mask, but "no object"
+    classes = torch.tensor([[5.0, -5.0], [-5.0, 5.0], [5.0, -5.0]])  # query 2: no mask at all
+    inst = queries_to_instances(classes, logits, (256, 256), mask_size=64)
+    assert len(inst) == 1 and inst.masks.shape == (1, 64, 64) and inst.scores[0] > 0.99
+    np.testing.assert_allclose(inst.boxes[0], [16, 36, 184, 60])  # the mask's box + one low-resolution pixel
+    y0, x0, patch = paste_mask(inst.masks[0], inst.boxes[0], 0.5, (256, 256))
+    full = np.zeros((256, 256), bool)
+    full[y0:y0 + patch.shape[0], x0:x0 + patch.shape[1]] = patch
+    want = np.zeros((256, 256), bool)
+    want[40:56, 20:180] = True
+    assert (full & want).sum() / (full | want).sum() > 0.85
+
+
+def test_mask2former_trains_on_empty_and_filled_crops_and_predicts():
+    pytest.importorskip("transformers")
+    from filament.detection.mask2former import Mask2FormerDetector
+    from filament.detection.model import backbone_body, predict_instances
+
+    torch.manual_seed(0)
+    model = Mask2FormerDetector(checkpoint=None, pretrained=False, mask_size=32)  # random Swin-T, no download
+    masks = torch.zeros(1, 128, 128, dtype=torch.uint8)
+    masks[0, 50:58, 20:100] = 1
+    filled = {"labels": torch.ones(1, dtype=torch.int64), "masks": masks}
+    empty = {"labels": torch.ones(0, dtype=torch.int64), "masks": torch.zeros(0, 128, 128, dtype=torch.uint8)}
+    model.train()
+    losses = model([torch.randn(3, 128, 128), torch.randn(3, 128, 128)], [filled, empty])
+    assert {"loss_cross_entropy", "loss_mask", "loss_dice", "loss_aux"} == set(losses)
+    sum(losses.values()).backward()
+    assert all(torch.isfinite(v) for v in losses.values())
+    assert any(p.grad is not None for p in backbone_body(model).parameters())
+
+    inst = predict_instances(model, np.random.default_rng(0).normal(size=(64, 64)).astype(np.float32),
+                             torch.device("cpu"), scale=2.0)  # runs on a 128 px input
+    assert inst.masks.shape[1:] == (32, 32) and inst.masks.dtype == np.float16
+    assert len(inst) == 0 or (inst.boxes[:, 2:] <= 64 + 1e-3).all()
+
+
 def _fake_detector(view):
     """Detects the bright pixels of a (view of an) image as one instance, as Mask R-CNN would: box + 28 x 28 mask."""
     from filament.detection.instances import Instances

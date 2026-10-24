@@ -1,0 +1,35 @@
+# Mask2Former (filament.detection.mask2former), Swin-T, COCO instance-segmentation weights; fold-0 screen against the
+# whole-backbone Mask R-CNN (maskrcnn_r50_v2_m56_ftall: 0.446 fold 0, 0.444 for its fold-0 checkpoint without TTA).
+# * optimizer as in the paper: AdamW, lr 1e-4, backbone x 0.1, weight decay 0.05, gradient norm clipped at 0.01
+#   (detectron2's "full_model" clipping; with Adam it only bounds the step direction's scale)
+# * 1024 px crops as for Mask R-CNN (2x upscaling made Mask R-CNN detect worse: less of the disk per crop)
+# * ~3.6 GiB per crop with the pixel decoder recomputed -> batch 3 on a T4 (~11 GiB); ~0.5 s per crop on an RTX 5070
+#   laptop GPU, Mask R-CNN 0.16 there and ~0.28 on a T4 -> ~0.9 s per crop, ~30 min per epoch of 2,000 crops.
+#   fit_epochs: after epoch 1 (validated) the schedule is shortened to what fits in max_hours
+# * masks are predicted at 1/4 resolution and stored at 128 x 128 per detection (Mask R-CNN: 56 x 56)
+name: mask2former_swin_t
+arch: mask2former
+pretrained: true
+checkpoint: facebook/mask2former-swin-tiny-coco-instance
+backbone_lr_mult: 0.1
+mask_size: 128
+crop: 1024
+batch_size: 3
+epochs: 30
+samples_per_epoch: 2000
+pos_fraction: 0.8
+min_instance_area: 30
+augment: base
+lr: 1.0e-4
+weight_decay: 0.05
+warmup_epochs: 1
+grad_clip: 0.01
+amp: fp16
+num_workers: 4
+val_every: 3
+val_mask_threshold: 0.5
+val_score_thresholds: [0.1, 0.3, 0.5, 0.7]
+val_min_area: 100
+max_hours: 5.6
+fit_epochs: true
+seed: 42

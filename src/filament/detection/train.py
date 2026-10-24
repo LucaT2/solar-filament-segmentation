@@ -29,7 +29,7 @@ from filament.data.folds import load_folds
 from filament.data.images import disk_mask
 from filament.detection.dataset import InstanceCropDataset, collate, full_image_input
 from filament.detection.instances import save_instances, to_components
-from filament.detection.model import build_maskrcnn, predict_instances, set_input_size
+from filament.detection.model import backbone_body, build_maskrcnn, predict_instances, set_input_size
 from filament.evaluation.metric import score_images
 from filament.evaluation.scoring import GroundTruth, score_components
 from filament.paths import get_data_paths, get_output_dir, resolve_exp_dir
@@ -41,11 +41,13 @@ from filament.tracking import start_run
 @dataclass
 class DetTrainConfig:
     name: str = "maskrcnn_r50_v2"
-    arch: str = "maskrcnn"  # maskrcnn | cascade (three box stages at IoU 0.5 / 0.6 / 0.7)
+    arch: str = "maskrcnn"  # maskrcnn | cascade (three box stages at IoU 0.5 / 0.6 / 0.7) | mask2former
     pretrained: bool = True  # COCO weights
+    checkpoint: str = "facebook/mask2former-swin-tiny-coco-instance"  # mask2former: Hugging Face model id
     trainable_layers: int = 3  # ResNet stages fine-tuned (0-5); the rest stay frozen (5 = whole backbone)
     backbone_lr_mult: float = 1.0  # backbone learning rate = lr * this (the FPN and the heads use lr)
-    mask_size: int = 28  # mask head output (28 = torchvision default; 56 = finer, more memory)
+    mask_size: int = 28  # mask head output (28 = torchvision default; 56 = finer, more memory); mask2former: the
+    # resolution its masks are stored at per detection (they are predicted at 1/4 of the image resolution)
     mask_dice_weight: float = 0.0  # mask loss = BCE + this x soft Dice per instance (0 = torchvision's BCE only)
     guide: str | None = None  # segmentation experiment whose probability maps become the 2nd input channel
     # (its oof/ maps for training images; OOF, so no image's guide comes from a model that saw its labels)
@@ -78,6 +80,8 @@ class DetTrainConfig:
     val_min_area: int = 100
     log_every: int = 50  # print progress every this many steps (0 = only per epoch)
     max_hours: float | None = None  # time budget: stop after the last epoch that still fits (keeps the best model)
+    fit_epochs: bool = False  # with max_hours: validate after epoch 1, then shorten ``epochs`` to what fits the
+    # budget, so the cosine schedule still decays to 0 (for slow models whose epoch time is not known in advance)
     seed: int = 42
     wandb: str = "auto"  # auto | on | offline | off (see filament.tracking)
     wandb_project: str | None = None
@@ -97,6 +101,11 @@ class DetTrainConfig:
 
 def build_from_config(cfg: dict | DetTrainConfig, pretrained: bool | None = None):
     c = cfg if isinstance(cfg, dict) else asdict(cfg)
+    if c.get("arch") == "mask2former":
+        from filament.detection.mask2former import Mask2FormerDetector
+
+        return Mask2FormerDetector(c["checkpoint"], c["pretrained"] if pretrained is None else pretrained,
+                                   c["mask_size"])
     return build_maskrcnn(c["pretrained"] if pretrained is None else pretrained, c["trainable_layers"],
                           c["detections_per_img"], mask_size=c["mask_size"], size=c["crop"],
                           arch=c.get("arch", "maskrcnn"), mask_dice_weight=c.get("mask_dice_weight", 0.0))
@@ -184,7 +193,7 @@ def run(cfg: DetTrainConfig, fold: int) -> dict:
     model = build_from_config(cfg).to(device)
     stamp(f"model ready on {device}", t_start)
     params = [p for p in model.parameters() if p.requires_grad]
-    backbone_ids = {id(p) for p in model.backbone.body.parameters()}  # the ResNet itself, not the FPN
+    backbone_ids = {id(p) for p in backbone_body(model).parameters()}
     param_groups = [
         {"params": [p for p in params if id(p) in backbone_ids], "lr": cfg.lr * cfg.backbone_lr_mult},
         {"params": [p for p in params if id(p) not in backbone_ids], "lr": cfg.lr},
@@ -248,7 +257,8 @@ def run(cfg: DetTrainConfig, fold: int) -> dict:
             raise RuntimeError(f"{cfg.name} {tag}: {skipped}/{len(loader)} batches with non-finite loss in epoch "
                                f"{epoch}; training diverged (try amp=bf16/none, grad_clip or a lower lr)")
 
-        if gt is not None and (epoch % cfg.val_every == 0 or epoch == cfg.epochs):
+        fitting = cfg.fit_epochs and cfg.max_hours and epoch == 1
+        if gt is not None and (epoch % cfg.val_every == 0 or epoch == cfg.epochs or fitting):
             if device.type == "cuda":
                 torch.cuda.empty_cache()
             t1 = time.time()
@@ -266,6 +276,18 @@ def run(cfg: DetTrainConfig, fold: int) -> dict:
         pd.DataFrame(log).to_csv(out / f"log_{tag}.csv", index=False)
         tracker.log({k.replace("pq@", "val/pq@score"): v for k, v in row.items()}, step=epoch)
         print(" ".join(f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}" for k, v in row.items()), flush=True)
+        if fitting:
+            val_s = row.get("val_s") or 120
+            per_epoch = row["train_s"] + val_s / cfg.val_every
+            # what is left after this epoch, the last epoch's validation and the final OOF pass, with the 10% margin
+            # of the time-budget stop below
+            left = cfg.max_hours * 3600 - (time.time() - t_start) - 2 * val_s
+            fit = max(epoch + 1, epoch + int(left / (1.1 * per_epoch)))
+            if fit < cfg.epochs:
+                stamp(f"{row['train_s']:.0f} s per epoch + {val_s:.0f} s per validation: {fit} of {cfg.epochs} epochs "
+                      f"fit in {cfg.max_hours} h; schedule shortened", t_start)
+                cfg.epochs = fit
+                sched.lr_lambdas = [lr_lambda(cfg, len(loader))] * len(opt.param_groups)
         if cfg.max_hours and epoch < cfg.epochs:
             elapsed = time.time() - t_start
             per_epoch = (elapsed - t_loop) / epoch
@@ -275,6 +297,8 @@ def run(cfg: DetTrainConfig, fold: int) -> dict:
                 if best < 0:  # no validated checkpoint yet (or a full-data model): keep the current model
                     torch.save({"model": model.state_dict(), "config": asdict(cfg), "epoch": epoch}, ckpt_path)
                 break
+        if epoch >= cfg.epochs:  # the schedule may have been shortened (fit_epochs)
+            break
 
     result = {"fold": fold, "best_val_pq": best}
     if gt is not None:

@@ -1,4 +1,5 @@
 """Mask R-CNN and Cascade Mask R-CNN (torchvision) set up for 1-channel, full-resolution solar images.
+(Mask2Former, the third instance model, is in ``filament.detection.mask2former``; the helpers below handle all three.)
 
 * COCO-pretrained ResNet50-FPN v2, with the box and mask heads replaced for 2 classes (background, filament);
   optionally with cascade box heads (``arch="cascade"``).
@@ -57,8 +58,16 @@ def build_maskrcnn(pretrained: bool = True, trainable_layers: int = 3, detection
     return model
 
 
+def backbone_body(model: nn.Module) -> nn.Module:
+    """The pretrained image encoder (the ResNet itself, without the FPN; Mask2Former's Swin), trained at
+    ``backbone_lr_mult`` x the learning rate."""
+    return model.encoder if hasattr(model, "encoder") else model.backbone.body
+
+
 def set_input_size(model: nn.Module, size: int) -> None:
     """Make torchvision feed images at their native size (no resizing) for images of side ``size``."""
+    if not hasattr(model, "transform"):  # Mask2Former takes the input as it is
+        return
     model.transform.min_size = (size,)
     model.transform.max_size = size
 
@@ -97,6 +106,10 @@ def predict_instances(model: nn.Module, x: np.ndarray, device, amp_dtype=None, s
     if scale != 1:
         size = (int(round(h * scale)), int(round(w * scale)))
         inp = torch.nn.functional.interpolate(inp[None], size=size, mode="bicubic", align_corners=False)[0]
+    if hasattr(model, "predict"):  # Mask2Former (filament.detection.mask2former)
+        inst = model.predict(inp, amp_dtype)
+        inst.boxes *= np.array([w / inp.shape[-1], h / inp.shape[-2]] * 2, np.float32)
+        return inst
     set_input_size(model, max(inp.shape[-2:]))
     with torch.autocast(device.type, dtype=amp_dtype, enabled=amp_dtype is not None and device.type == "cuda"):
         images, _ = model.transform([inp])

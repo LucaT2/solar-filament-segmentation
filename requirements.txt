@@ -18,3 +18,4 @@ matplotlib==3.11.2
 PyYAML==6.0.3
 tqdm==4.70.1
 wandb==0.30.0
+transformers==5.20.2  # Mask2Former only (filament.detection.mask2former); preinstalled on Kaggle

@@ -1,0 +1,29 @@
+# Mask2Former with Swin-S (69 M parameters vs 47 M): as mask2former_swin_t, with the larger backbone.
+# ~4.8 GiB at batch 1 (1.1 GiB of it weights + optimizer state), ~3.6 GiB per further crop -> ~12 GiB at batch 3 on a
+# T4; ~15% slower than Swin-T per crop (fit_epochs shortens the schedule to what fits in max_hours).
+name: mask2former_swin_s
+arch: mask2former
+pretrained: true
+checkpoint: facebook/mask2former-swin-small-coco-instance
+backbone_lr_mult: 0.1
+mask_size: 128
+crop: 1024
+batch_size: 3
+epochs: 30
+samples_per_epoch: 2000
+pos_fraction: 0.8
+min_instance_area: 30
+augment: base
+lr: 1.0e-4
+weight_decay: 0.05
+warmup_epochs: 1
+grad_clip: 0.01
+amp: fp16
+num_workers: 4
+val_every: 3
+val_mask_threshold: 0.5
+val_score_thresholds: [0.1, 0.3, 0.5, 0.7]
+val_min_area: 100
+max_hours: 5.6
+fit_epochs: true
+seed: 42
