@@ -10,6 +10,9 @@ Filaments cut by the crop edge are kept if at least ``min_instance_area`` pixels
 
 With ``guide_dir``, a segmentation model's out-of-fold probability map of the same image is cropped and augmented
 together with it and becomes the second input channel (see ``filament.detection.model.make_input``).
+
+With ``copy_paste_p`` > 0, that share of annotated crops gets 1..``copy_paste_max`` training filaments pasted in
+(``filament.detection.copy_paste``) before the augmentations.
 """
 
 from __future__ import annotations
@@ -70,6 +73,8 @@ class InstanceCropDataset(Dataset):
         scale: float = 1.0,
         pseudo=None,
         pseudo_p: float = 0.5,
+        copy_paste_p: float = 0.0,
+        copy_paste_max: int = 3,
     ):
         sub = ann[ann.stem.isin(set(stems))]
         # semi-supervised: with probability pseudo_p a crop comes from a pseudo-labelled frame (filament.semi.data)
@@ -90,10 +95,19 @@ class InstanceCropDataset(Dataset):
         self.pos_fraction = pos_fraction
         self.augment = augment
         self.min_instance_area = min_instance_area
-        self.items = []  # one per annotator-image: its filaments' RLEs and centres
+        self.items = []  # one per annotator-image: its filaments' RLEs, centres and boxes
         for (stem, _), g in sub.groupby(["stem", "annotator_image"], sort=True):
             centers = np.stack([g.bbox_y + g.bbox_h / 2, g.bbox_x + g.bbox_w / 2], axis=1)
-            self.items.append({"stem": stem, "rles": g.rle.tolist(), "centers": centers})
+            boxes = np.stack([g.bbox_x, g.bbox_y, g.bbox_x + g.bbox_w, g.bbox_y + g.bbox_h], axis=1)
+            self.items.append({"stem": stem, "rles": g.rle.tolist(), "centers": centers, "boxes": boxes})
+        # copy-paste: training filaments pasted into annotated crops; every annotator's boxes of an image stay free
+        self.paster = None
+        if copy_paste_p > 0:
+            from filament.detection.copy_paste import FilamentPaster
+
+            self.paster = FilamentPaster(self.items, infos, copy_paste_p, copy_paste_max)
+            self.taken = {s: np.concatenate([it["boxes"] for it in self.items if it["stem"] == s])
+                          for s in {it["stem"] for it in self.items}}
         self._cache: dict[str, np.ndarray] = {}
 
     def __len__(self) -> int:
@@ -132,7 +146,12 @@ class InstanceCropDataset(Dataset):
         x0 = int(np.clip(cx - n // 2, 0, w - n))
         sl = (slice(y0, y0 + n), slice(x0, x0 + n))
         layers = [m for m in (rle_to_mask(r)[sl] for r in item["rles"]) if m.any()]
-        return img[sl], layers, info, (guide[sl] if guide is not None else None)
+        crop = img[sl]
+        if self.paster is not None and guide is None:  # (a guide map would not show the pasted filaments)
+            crop, pasted = self.paster(crop, item["stem"], (y0, x0), info.disk, self.taken[item["stem"]], rng,
+                                       lambda s: self._image(s)[0])
+            layers += pasted
+        return crop, layers, info, (guide[sl] if guide is not None else None)
 
     def __getitem__(self, index: int):
         rng = np.random.default_rng(int(torch.randint(0, 2**62, (1,)).item()))

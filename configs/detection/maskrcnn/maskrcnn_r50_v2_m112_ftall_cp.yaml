@@ -1,0 +1,32 @@
+# Both: the 112 px mask head (maskrcnn_r50_v2_m112_ftall, same batch 4 / 24 epochs) + copy-paste augmentation
+# (maskrcnn_r50_v2_m56_ftall_cp). Run in the pseudo-label session's spare GPU, so a combination of two winners needs
+# no extra screen.
+name: maskrcnn_r50_v2_m112_ftall_cp
+copy_paste_p: 0.5
+copy_paste_max: 3
+arch: maskrcnn
+pretrained: true
+trainable_layers: 5
+backbone_lr_mult: 0.25
+mask_size: 112
+detections_per_img: 100
+crop: 1024
+batch_size: 4
+epochs: 24
+samples_per_epoch: 2000
+pos_fraction: 0.8
+min_instance_area: 30
+augment: base
+lr: 1.0e-4
+weight_decay: 1.0e-4
+warmup_epochs: 2
+grad_clip: 10.0
+amp: fp16
+num_workers: 4
+val_every: 2
+val_mask_threshold: 0.5
+val_score_thresholds: [0.3, 0.5, 0.7]
+val_min_area: 100
+max_hours: 7.5
+fit_epochs: true
+seed: 42

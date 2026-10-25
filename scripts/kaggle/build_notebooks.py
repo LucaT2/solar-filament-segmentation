@@ -40,14 +40,16 @@ code("""
 # ---- configuration ---------------------------------------------------------------------------------------
 # Each experiment: a config from the repo, the folds to train (cross-validation, with validation) and/or seeds of
 # full-data models (all 707 images, no validation). Jobs of all experiments are spread over the GPUs.
-EXPERIMENTS = [   # final stage: ConvNeXt-Tiny U-Net folds 1-4 (fold 0 exists), ~1.7 h each: GPU 0 folds 1, 3;
-    # GPU 1 folds 2, 4. (Whole-backbone Mask R-CNN: all 5 folds exist.)
-    {"config": "configs/segmentation/unet_convnext_t_skel050.yaml", "folds": [1, 2, 3, 4], "full_seeds": [],
-     "overrides": []},
+EXPERIMENTS = [   # last screens, fold 0 (part 2 of 2; part 1 in kaggle_screen.ipynb), compared locally with the
+    # whole-backbone Mask R-CNN's fold 0. GPU 0: pseudo-label student with full real exposure (~7.8 h; needs the
+    # private dataset solar-filament-pseudo as an input). GPU 1: 112 px mask head + copy-paste (~6.5 h).
+    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m56_ftall_pseudo_full.yaml", "folds": [0],
+     "full_seeds": [], "overrides": [], "gpus": [0]},
+    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m112_ftall_cp.yaml", "folds": [0], "full_seeds": [],
+     "overrides": [], "gpus": [1]},
 ]
 # attached inputs with earlier experiment results, matched by "<notebook>/<experiment>" in their path
-# (Add Input -> Your Work -> Notebooks); none needed: OOF predictions with TTA, tuning on all folds and the test
-# predictions are made locally from the downloaded checkpoints
+# (Add Input -> Your Work -> Notebooks); none needed (comparisons are made locally)
 CHECKPOINT_DATASETS = []
 BASELINE = "none"                      # no in-notebook comparison (each fold has its own validation images)
 TTA = True                             # U-Net only: average 4 flips per model when predicting
@@ -361,13 +363,12 @@ nbf.write(nbf.v4.new_notebook(cells=cells, metadata=META), REPO_ROOT / "notebook
 # Second notebook for a parallel session (Kaggle allows 2 GPU sessions at once): same code, different experiments.
 SCREEN_CONFIG = '''
 # ---- configuration ---------------------------------------------------------------------------------------
-# Fold-0 screen: Mask2Former, Swin-T (GPU 0) and Swin-S (GPU 1), vs the whole-backbone Mask R-CNN's fold 0 (compared
-# locally). ~30-35 min per epoch on a T4; after epoch 1 each run shortens its schedule to what fits in max_hours 5.6
-# (fit_epochs), so expect ~9-10 epochs and a ~5.6 h session.
+# Last screens, fold 0 (part 1 of 2; part 2 in kaggle_train_submit.ipynb), vs the whole-backbone Mask R-CNN's fold 0
+# (compared locally). GPU 0: copy-paste augmentation (~5.3 h). GPU 1: 112 px mask head (batch 4, 24 epochs, ~6.5 h).
 EXPERIMENTS = [
-    {"config": "configs/detection/mask2former/mask2former_swin_t.yaml", "folds": [0], "full_seeds": [],
+    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m56_ftall_cp.yaml", "folds": [0], "full_seeds": [],
      "overrides": [], "gpus": [0]},
-    {"config": "configs/detection/mask2former/mask2former_swin_s.yaml", "folds": [0], "full_seeds": [],
+    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m112_ftall.yaml", "folds": [0], "full_seeds": [],
      "overrides": [], "gpus": [1]},
 ]
 # attached inputs, matched by "<notebook>/<experiment>" in their path; none needed (everything else is local)

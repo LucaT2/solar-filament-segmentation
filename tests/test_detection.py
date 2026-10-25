@@ -135,6 +135,63 @@ def test_guide_map_stays_aligned_with_the_instances(ann, ai, tmp_path):
     assert full.shape == (3, 2048, 2048) and (full[1] > 0).sum() == union.sum()
 
 
+def test_copy_paste_transfers_darkness_away_from_taken_boxes():
+    """A bar 20% darker than its background, pasted into a brighter crop, darkens it by 20% inside its mask, never
+    inside a taken box (+ margin), and leaves the input crop untouched."""
+    from types import SimpleNamespace
+
+    import cv2
+
+    from filament.data.images import Disk
+    from filament.detection.copy_paste import FilamentPaster
+
+    stem = "20140101000000B"  # site = stem[14]
+    src = np.full((512, 512), 150, np.uint8)
+    bar = np.zeros((512, 512), np.uint8)
+    bar[250:258, 200:300] = 1
+    src[bar > 0] = 120
+    disk = Disk(256.0, 256.0, 250.0)
+    item = {"stem": stem, "rles": [mask_to_rle(bar)], "boxes": np.array([[200, 250, 300, 258]], float)}
+    paster = FilamentPaster([item], {stem: SimpleNamespace(disk=disk)}, p=1.0, max_paste=3, radial_tol=1.0)
+    crop = np.full((512, 512), 200, np.uint8)
+    taken = np.array([[0, 0, 256, 512]], float)  # left half occupied
+    rng = np.random.default_rng(0)
+    out, layers = paster(crop, stem, (0, 0), disk, taken, rng, lambda s: src)
+    assert (crop == 200).all() and layers
+    for m in layers:
+        ys, xs = np.nonzero(m)
+        assert xs.min() >= 256 + paster.margin and m.sum() == bar.sum()
+        core = cv2.erode(m, np.ones((3, 3), np.uint8))
+        assert np.abs(out[core > 0].astype(float) - 160).max() <= 2  # 200 x 120 / 150
+    if len(layers) > 1:
+        assert not np.logical_and(layers[0], np.any(layers[1:], axis=0)).any()
+    far = cv2.dilate(np.any(layers, axis=0).astype(np.uint8), np.ones((9, 9), np.uint8)) == 0
+    assert (out[far] == 200).all()  # nothing changes away from the pasted filaments
+
+
+def test_copy_paste_adds_valid_instances_to_annotated_crops(ann, ai):
+    from filament.detection.dataset import InstanceCropDataset
+    from filament.paths import get_data_paths
+    from filament.segmentation.dataset import image_info
+
+    stems = ai[ai.n_annotators == 1].stem.iloc[:3].tolist()
+    infos = {s: image_info(get_data_paths().train_images / f"{s}.jpeg") for s in stems}
+    counts = {}
+    for p in (0.0, 1.0):
+        torch.manual_seed(0)
+        ds = InstanceCropDataset(ann, infos, stems, crop=512, samples_per_epoch=10, pos_fraction=1.0,
+                                 copy_paste_p=p)
+        counts[p] = []
+        for i in range(10):
+            x, t = ds[i]
+            n = len(t["labels"])
+            assert t["boxes"].shape == (n, 4) and t["masks"].shape == (n, 512, 512)
+            if n:
+                assert int(t["masks"].sum(0).max()) == 1  # pasted filaments never overlap other instances
+            counts[p].append(n)
+    assert all(b >= a for a, b in zip(counts[0.0], counts[1.0])) and sum(counts[1.0]) > sum(counts[0.0])
+
+
 @pytest.fixture(scope="module")
 def cascade_model():
     from filament.detection.model import build_maskrcnn

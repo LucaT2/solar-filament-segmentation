@@ -57,6 +57,8 @@ class DetTrainConfig:
     pseudo_p: float = 0.5  # probability that a training crop comes from a pseudo-labelled frame
     pseudo_conf: float = 0.6  # teacher P(match) from which a candidate is a training instance
     pseudo_unsure: float = 0.3  # candidates with P in [unsure, conf) make a crop rejected; below: background
+    copy_paste_p: float = 0.0  # share of annotated crops that get training filaments pasted in (filament.detection.copy_paste)
+    copy_paste_max: int = 3  # up to this many filaments per such crop
     scale: float = 1.0  # input upscaling: training crops of crop/scale native px upscaled to crop; images x scale
     guide_test_maps: str = "test"  # the guide's folder with test maps. Training sees single-model OOF maps, so
     # single-model test maps (e.g. test_fold0) match them better than a softer multi-fold average
@@ -183,7 +185,7 @@ def run(cfg: DetTrainConfig, fold: int) -> dict:
     ds = InstanceCropDataset(ann, infos, train_stems, cfg.crop, cfg.samples_per_epoch, cfg.pos_fraction,
                              build_augment(cfg.augment), cfg.min_instance_area, guide_dir(cfg, "oof"),
                              load_training_neighbours(cfg.neighbours, train_stems), cfg.neighbour_p, cfg.scale,
-                             load_pseudo(cfg), cfg.pseudo_p)
+                             load_pseudo(cfg), cfg.pseudo_p, cfg.copy_paste_p, cfg.copy_paste_max)
     loader = DataLoader(ds, batch_size=cfg.batch_size, shuffle=True, num_workers=cfg.num_workers, pin_memory=True,
                         drop_last=True, persistent_workers=cfg.num_workers > 0, collate_fn=collate)
     gt = GroundTruth(ann, val_stems) if val_stems else None

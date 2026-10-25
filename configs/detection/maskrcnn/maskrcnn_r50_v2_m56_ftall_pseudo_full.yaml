@@ -1,0 +1,37 @@
+# Semi-supervised student with full real exposure: the first students (maskrcnn_r50_v2_m56_ftall_pseudo, 0.447 vs
+# 0.446) replaced half of the real crops with pseudo-labelled ones (32k real crops instead of 64k). Here every epoch
+# keeps the reference's 2,000 real crops and adds 1,000 pseudo-labelled ones (3,000 per epoch, pseudo_p 1/3): the
+# same 32k pseudo crops as before on top of the full 64k real ones. Same fold-0-clean pseudo labels (teacher_f0,
+# cut-off 0.6, the better of the two students), so the fold-0 validation stays honest.
+# ~1.5x the reference's time: ~850 s per epoch on a T4 -> ~7.8 h for 32 epochs.
+name: maskrcnn_r50_v2_m56_ftall_pseudo_full
+pseudo: pseudo
+pseudo_p: 0.3333
+pseudo_conf: 0.6
+pseudo_unsure: 0.3
+arch: maskrcnn
+pretrained: true
+trainable_layers: 5
+backbone_lr_mult: 0.25
+mask_size: 56
+detections_per_img: 100
+crop: 1024
+batch_size: 6
+epochs: 32
+samples_per_epoch: 3000
+pos_fraction: 0.8
+min_instance_area: 30
+augment: base
+lr: 1.5e-4
+weight_decay: 1.0e-4
+warmup_epochs: 2
+grad_clip: 10.0
+amp: fp16
+num_workers: 4
+val_every: 2
+val_mask_threshold: 0.5
+val_score_thresholds: [0.3, 0.5, 0.7]
+val_min_area: 100
+max_hours: 9.5
+fit_epochs: true
+seed: 42
