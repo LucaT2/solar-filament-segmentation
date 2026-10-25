@@ -1,8 +1,10 @@
 # Finer masks: as maskrcnn_r50_v2_m56_ftall (reference 0.446), but a 112 px mask head (56 px RoIs). Along a long
 # filament's box the 56 px head spends ~7 native px per mask pixel; 112 px halves that.
 # Laptop benchmark (batch 2, real crops): 2.44 vs 1.83 GiB per image, 0.225 vs 0.135 s per image (~950 s per epoch on
-# a T4). Batch 6 would peak too high on crops with many filaments -> batch 4 / lr 1e-4 (linear scaling, as the
-# cascade), and 24 epochs (the 20-epoch Dice run already matched 32 epochs) -> ~6.5 h.
+# a T4). Batch 4 ran out of memory on Kaggle (2026-10-25, with copy-paste, step ~220: 13.2 GiB + 1.8 GiB): the mask
+# head takes up to 128 positive RoIs per image, ~2.4 GiB per image at 112 px in the worst case -> batch 2 / lr 5e-5
+# (linear scaling; worst case ~8 GiB), and 24 epochs (the 20-epoch Dice run already matched 32 epochs). Measured
+# 0.29 s per image on a T4 at batch 4 -> ~10-11 min per epoch, ~4.5-5 h.
 name: maskrcnn_r50_v2_m112_ftall
 arch: maskrcnn
 pretrained: true
@@ -11,13 +13,13 @@ backbone_lr_mult: 0.25
 mask_size: 112
 detections_per_img: 100
 crop: 1024
-batch_size: 4
+batch_size: 2
 epochs: 24
 samples_per_epoch: 2000
 pos_fraction: 0.8
 min_instance_area: 30
 augment: base
-lr: 1.0e-4
+lr: 5.0e-5
 weight_decay: 1.0e-4
 warmup_epochs: 2
 grad_clip: 10.0

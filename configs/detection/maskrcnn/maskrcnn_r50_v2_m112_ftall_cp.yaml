@@ -1,4 +1,4 @@
-# Both: the 112 px mask head (maskrcnn_r50_v2_m112_ftall, same batch 4 / 24 epochs) + copy-paste augmentation
+# Both: the 112 px mask head (maskrcnn_r50_v2_m112_ftall, same batch 2 / 24 epochs) + copy-paste augmentation
 # (maskrcnn_r50_v2_m56_ftall_cp). Run in the pseudo-label session's spare GPU, so a combination of two winners needs
 # no extra screen.
 name: maskrcnn_r50_v2_m112_ftall_cp
@@ -11,13 +11,13 @@ backbone_lr_mult: 0.25
 mask_size: 112
 detections_per_img: 100
 crop: 1024
-batch_size: 4
+batch_size: 2
 epochs: 24
 samples_per_epoch: 2000
 pos_fraction: 0.8
 min_instance_area: 30
 augment: base
-lr: 1.0e-4
+lr: 5.0e-5
 weight_decay: 1.0e-4
 warmup_epochs: 2
 grad_clip: 10.0
