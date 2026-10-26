@@ -96,6 +96,23 @@ def test_validate_submission_catches_problems():
     assert any("quotes" in p for p in validate_submission(quoted))
 
 
+def test_validate_submission_flags_overlapping_filaments():
+    def box(y0, y1, x0, x1):
+        m = np.zeros((2048, 2048), bool)
+        m[y0:y1, x0:x1] = True
+        return m
+
+    stem = "20110120105534Ch"
+    other = "20110121105534Ch"
+    disjoint = build_submission({stem: [box(0, 10, 0, 10), box(0, 10, 10, 20)], other: [box(0, 10, 0, 10)]})
+    assert validate_submission(disjoint) == []  # touching is not overlapping; the same box in another image is fine
+
+    overlapping = build_submission({stem: [box(0, 10, 0, 10), box(5, 15, 5, 15), box(100, 110, 0, 10)]})
+    (problem,) = validate_submission(overlapping)
+    assert "1 overlapping filament pairs in 1 images (25 shared pixels)" in problem
+    assert f"{stem}_1 and {stem}_2 share 25 px" in problem
+
+
 def test_rle_iou_matches_dense():
     rng = np.random.default_rng(2)
     a, b = random_mask(rng), random_mask(rng)
