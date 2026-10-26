@@ -342,7 +342,14 @@ head and watershed. The PQ levers are boundary precision (±1 px), connectivity,
 
 ## Stage 6 — Polish and final deliverables
 - [ ] Combine fold models + flip/rotation averaging at test time (TTA). Re-tune post-processing on out-of-fold predictions.
-- [ ] Watch inference time (computational efficiency is judged).
+- [x] Watch inference time (computational efficiency is judged). *Measured 2026-10-26*
+      (`scripts/evaluation/time_inference.py`, RTX 5070 Laptop, 20 test images after 2 warm-up, `outputs/inference_timing.csv`),
+      seconds per 2048² image: detector 1 model, 1 view **0.45** (peak 1.7 GiB); detector 5 folds × 8 views **15.8**
+      (2.4 GiB; 40 passes at 0.39 s vs 0.24 s for a single pass); U-Net ConvNeXt 1 model **0.68**; w40 + classifier **25.7**
+      (U-Net 10 models × 8 views 10.4 s, detector 14.8 s, post-processing + classifier + RLE 0.25 s; 3.6 GiB). Whole
+      test set (180 images): 1.3 / 47 / 2.0 / 77 min. Quality per pipeline (707 OOF images): one detector without TTA
+      ~0.438–0.444 vs 0.452 with 5 folds × TTA → 35× faster for −0.01 PQ. CPU stages (JPEG, disk fit, components,
+      classifier, encoding) are < 0.4 s.
 - [ ] Repo cleanup: docs, modular code, pinned `requirements.txt`, reproducible end-to-end notebook.
 - [ ] 4-page technical report (Overleaf template) → PDF.
 - [ ] Google form submission before Nov 15; repo public until winners are announced (Nov 30).
