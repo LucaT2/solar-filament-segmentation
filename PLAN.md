@@ -410,6 +410,8 @@ All logic lives in `src/`, so the notebook stays short and matches local runs.
 | 2026-10-11 | re-run fold-0 screen: ConvNeXt-T + **MAnet**, fp32 decoder, thr 0.85 | 0.417 (f0); nested 0.441 | ? | vs ConvNeXt-T + U-Net: ΔPQ −0.006 [−0.015, +0.004], P 0.10; trained cleanly (no skipped batches) |
 | 2026-10-11 | local: ensemble ResNet34 + ConvNeXt-T + MiT-B2 (fold-0 maps, 4 flips), thr 0.85 | 0.428 (f0); nested 0.441 | – | vs 2-model ensemble: +0.004 [−0.006, +0.015], P 0.78 before the classifier; after the classifier, below it (0.441 vs 0.445) |
 
+| 2026-10-26 | **ablation submissions** (5-fold models, tuned on 707 OOF; `outputs/submission_*_noclf.csv`, `submission_unet5f_clf.csv`) | U-Net 5f no classifier 0.425 / + classifier 0.444 (nested) / w60 no classifier 0.431 / w40 no classifier 0.433 | **0.36 / 0.37 / 0.36 / 0.37** | the classifier is worth +0.01 on the LB (+0.02 locally), the detector +0.01 without and +0.02 with the classifier (w40 + classifier 0.39, detector alone 0.39). LB / local ratio 0.83–0.87 for every file |
+
 *Full-data models: no measurable gain on the public LB (all three at 0.37). Decision for the final recipe: optional; add 1–2 only if GPU time is left over at the end.*
 
 *Public LB ≈ 0.87 × local OOF PQ for both models so far (public test subset somewhat harder, plus noise on about 90 images).*
