@@ -1,0 +1,31 @@
+# DINOv3 pretraining, one size up: as unet_convnext_t_dinov3_skel050 but ConvNeXt-Small (50 M vs 28 M encoder
+# parameters; same stage widths, 27 instead of 9 blocks in stage 3). Same recipe, so it shows whether a bigger
+# DINOv3 encoder adds anything on top of the pretraining itself.
+name: unet_convnext_s_dinov3_skel050
+arch: Unet
+encoder: tu-convnext_small.dinov3_lvd1689m
+pretrained: true
+crop: 512
+batch_size: 16
+epochs: 30
+samples_per_epoch: 4000
+pos_fraction: 0.7
+augment: base
+lr: 0.0007
+encoder_lr_mult: 0.25
+weight_decay: 0.0001
+warmup_epochs: 2
+bce_weight: 1.0
+dice_weight: 1.0
+skel_weight: 0.5
+skel_radius: 1
+target_mode: random
+amp: fp16
+num_workers: 4
+val_every: 2
+val_thresholds: [0.6, 0.7, 0.8, 0.9]
+val_min_area: 50
+seed: 42
+wandb: auto
+wandb_project: null
+wandb_entity: null

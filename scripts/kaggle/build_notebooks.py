@@ -132,7 +132,7 @@ code("""
 # missing, pinned to the versions tested locally (requirements.txt), without touching the preinstalled stack.
 log("installing packages")
 for cmd in ([sys.executable, "-m", "pip", "install", "-q", "--no-deps", "segmentation-models-pytorch==0.5.0",
-             "albumentations==2.0.8", "albucore==0.0.24", "pycocotools"],
+             "albumentations==2.0.8", "albucore==0.0.24", "pycocotools", "timm==1.0.30"],   # timm: DINOv3 weights
             [sys.executable, "-m", "pip", "install", "-q", "--no-deps", "-e", str(REPO)]):
     res = run(cmd, 300, "pip install")
     if res.returncode != 0:
@@ -140,8 +140,8 @@ for cmd in ([sys.executable, "-m", "pip", "install", "-q", "--no-deps", "segment
 sys.path.insert(0, str(REPO / "src"))
 os.chdir(REPO)
 
-import torch, yaml
-log(f"packages installed; torch {torch.__version__}, "
+import torch, yaml, timm
+log(f"packages installed; torch {torch.__version__}, timm {timm.__version__}, "
     f"GPUs {[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]}")
 !python scripts/setup/check_env.py
 log("environment checked")
@@ -197,6 +197,12 @@ if any(e["kind"] == "detection" and det_config(e).get("arch", "maskrcnn") != "ma
     from torchvision.models.detection import MaskRCNN_ResNet50_FPN_V2_Weights
     MaskRCNN_ResNet50_FPN_V2_Weights.DEFAULT.get_state_dict(progress=False)
     log("Mask R-CNN COCO weights downloaded")
+for e in EXPERIMENTS:   # timm encoders (e.g. DINOv3 ConvNeXt): download the weights once, before parallel jobs
+    c = det_config(e)   # (the same yaml read works for segmentation configs)
+    name = c.get("backbone") if e["kind"] == "detection" else c.get("encoder", "").removeprefix("tu-")
+    if name and name != "resnet50" and "." in name:   # an explicit timm weight tag, e.g. convnext_tiny.dinov3_lvd1689m
+        timm.create_model(name, pretrained=True, features_only=True)
+        log(f"timm weights {name} downloaded")
 for e in EXPERIMENTS:   # Mask2Former (preinstalled transformers): weights + one tiny training step on the CPU, so an
     c = det_config(e) if e["kind"] == "detection" else {}   # API mismatch fails here, not hours into the run
     if c.get("arch") == "mask2former":
@@ -363,12 +369,15 @@ nbf.write(nbf.v4.new_notebook(cells=cells, metadata=META), REPO_ROOT / "notebook
 # Second notebook for a parallel session (Kaggle allows 2 GPU sessions at once): same code, different experiments.
 SCREEN_CONFIG = '''
 # ---- configuration ---------------------------------------------------------------------------------------
-# Last screens, fold 0 (part 1 of 2; part 2 in kaggle_train_submit.ipynb), vs the whole-backbone Mask R-CNN's fold 0
-# (compared locally). GPU 0: copy-paste augmentation (~5.3 h). GPU 1: 112 px mask head (batch 4, 24 epochs, ~6.5 h).
+# DINOv3 screen, fold 0 (compared locally with the ImageNet / ResNet50 references). GPU 0: U-Net with a DINOv3
+# ConvNeXt-T encoder (~1.7 h), then ConvNeXt-S (~2.7 h). GPU 1: Mask R-CNN with a DINOv3 ConvNeXt-T backbone
+# (batch 4, schedule shortened to fit 5.6 h). ~6 h session.
 EXPERIMENTS = [
-    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m56_ftall_cp.yaml", "folds": [0], "full_seeds": [],
+    {"config": "configs/segmentation/unet_convnext_t_dinov3_skel050.yaml", "folds": [0], "full_seeds": [],
      "overrides": [], "gpus": [0]},
-    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m112_ftall.yaml", "folds": [0], "full_seeds": [],
+    {"config": "configs/segmentation/unet_convnext_s_dinov3_skel050.yaml", "folds": [0], "full_seeds": [],
+     "overrides": [], "gpus": [0]},
+    {"config": "configs/detection/maskrcnn/maskrcnn_dinov3_convnext_t_m56.yaml", "folds": [0], "full_seeds": [],
      "overrides": [], "gpus": [1]},
 ]
 # attached inputs, matched by "<notebook>/<experiment>" in their path; none needed (everything else is local)

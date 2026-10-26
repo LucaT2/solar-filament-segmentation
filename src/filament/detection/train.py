@@ -44,6 +44,7 @@ class DetTrainConfig:
     arch: str = "maskrcnn"  # maskrcnn | cascade (three box stages at IoU 0.5 / 0.6 / 0.7) | mask2former
     pretrained: bool = True  # COCO weights
     checkpoint: str = "facebook/mask2former-swin-tiny-coco-instance"  # mask2former: Hugging Face model id
+    backbone: str = "resnet50"  # resnet50 (torchvision COCO) or a timm encoder name, e.g. convnext_tiny.dinov3_lvd1689m
     trainable_layers: int = 3  # ResNet stages fine-tuned (0-5); the rest stay frozen (5 = whole backbone)
     backbone_lr_mult: float = 1.0  # backbone learning rate = lr * this (the FPN and the heads use lr)
     mask_size: int = 28  # mask head output (28 = torchvision default; 56 = finer, more memory); mask2former: the
@@ -110,7 +111,8 @@ def build_from_config(cfg: dict | DetTrainConfig, pretrained: bool | None = None
                                    c["mask_size"])
     return build_maskrcnn(c["pretrained"] if pretrained is None else pretrained, c["trainable_layers"],
                           c["detections_per_img"], mask_size=c["mask_size"], size=c["crop"],
-                          arch=c.get("arch", "maskrcnn"), mask_dice_weight=c.get("mask_dice_weight", 0.0))
+                          arch=c.get("arch", "maskrcnn"), mask_dice_weight=c.get("mask_dice_weight", 0.0),
+                          backbone=c.get("backbone", "resnet50"))
 
 
 def guide_dir(cfg: dict | DetTrainConfig, split: str) -> Path | None:

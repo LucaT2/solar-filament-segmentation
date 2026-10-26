@@ -338,6 +338,34 @@ def test_maskrcnn_trains_and_predicts_raw_instances():
     assert inst.masks.dtype == np.float16 and (inst.boxes[:, 2:] <= 256 + 1e-3).all()
 
 
+def test_timm_backbone_replaces_resnet_and_trains():
+    """A timm encoder (here a tiny ConvNeXt, no download) + FPN in place of ResNet50-FPN: the pyramid has the levels
+    the RPN and RoI heads expect, the encoder is what backbone_body() trains at the backbone learning rate, and the
+    model trains and predicts like the ResNet one."""
+    from filament.detection.model import (TimmFPNBackbone, backbone_body, build_maskrcnn, predict_instances,
+                                          set_input_size)
+
+    torch.manual_seed(0)
+    model = build_maskrcnn(pretrained=False, size=256, mask_size=56, backbone="convnext_atto")
+    assert isinstance(model.backbone, TimmFPNBackbone) and backbone_body(model) is model.backbone.body
+    feats = model.backbone(torch.randn(1, 3, 256, 256))
+    assert list(feats) == ["0", "1", "2", "3", "pool"]
+    assert [f.shape[-1] for f in feats.values()] == [64, 32, 16, 8, 4] and {f.shape[1] for f in feats.values()} == {256}
+
+    masks = torch.zeros(1, 256, 256, dtype=torch.uint8)
+    masks[0, 100:120, 40:200] = 1
+    target = {"boxes": torch.tensor([[40.0, 100.0, 200.0, 120.0]]), "labels": torch.ones(1, dtype=torch.int64),
+              "masks": masks}
+    model.train()
+    set_input_size(model, 256)
+    losses = model([torch.randn(3, 256, 256)], [target])
+    assert all(torch.isfinite(v) for v in losses.values())
+    sum(losses.values()).backward()
+    assert all(p.grad is not None for p in backbone_body(model).parameters() if p.requires_grad)
+    inst = predict_instances(model, np.zeros((256, 256), np.float32), torch.device("cpu"))
+    assert inst.masks.shape[1:] == (56, 56)
+
+
 def test_mask2former_queries_become_instances_on_their_masks():
     from filament.detection.instances import paste_mask
     from filament.detection.mask2former import queries_to_instances

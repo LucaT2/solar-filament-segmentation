@@ -18,11 +18,36 @@ from torch import nn
 from filament.detection.instances import Instances
 
 
+class TimmFPNBackbone(nn.Module):
+    """A timm encoder (features at strides 4, 8, 16, 32, like ResNet's C2-C5) + an FPN, in place of torchvision's
+    ResNet50-FPN. ``body`` is the encoder (trained at ``backbone_lr_mult``), ``fpn`` the pyramid (256 channels)."""
+
+    def __init__(self, name: str, pretrained: bool = True):
+        import timm
+        from torchvision.ops.feature_pyramid_network import FeaturePyramidNetwork, LastLevelMaxPool
+
+        super().__init__()
+        self.body = timm.create_model(name, pretrained=pretrained, features_only=True, out_indices=(0, 1, 2, 3))
+        # as in maskrcnn_resnet50_fpn_v2: batch norm in the FPN, an extra max-pooled level for the RPN
+        self.fpn = FeaturePyramidNetwork(self.body.feature_info.channels(), 256, extra_blocks=LastLevelMaxPool(),
+                                         norm_layer=nn.BatchNorm2d)
+        self.out_channels = 256
+
+    def forward(self, x: torch.Tensor):
+        from collections import OrderedDict
+
+        return self.fpn(OrderedDict((str(i), f) for i, f in enumerate(self.body(x))))
+
+
 def build_maskrcnn(pretrained: bool = True, trainable_layers: int = 3, detections_per_img: int = 100,
                    score_thresh: float = 0.01, mask_size: int = 28, size: int = 1024,
-                   arch: str = "maskrcnn", mask_dice_weight: float = 0.0) -> nn.Module:
+                   arch: str = "maskrcnn", mask_dice_weight: float = 0.0, backbone: str = "resnet50") -> nn.Module:
     """``arch``: "maskrcnn" (one box stage) or "cascade" (three box stages, ``filament.detection.cascade``).
-    ``mask_dice_weight`` > 0 adds a soft Dice term to the mask loss (``filament.detection.losses``)."""
+    ``mask_dice_weight`` > 0 adds a soft Dice term to the mask loss (``filament.detection.losses``).
+    ``backbone``: "resnet50" (torchvision's COCO model as it is) or a timm model name (e.g.
+    "convnext_tiny.dinov3_lvd1689m"): that encoder + a new FPN replace ResNet50-FPN; the COCO RPN, box and mask heads
+    and the FPN's 3x3 output convolutions (256 -> 256, so independent of the encoder) are kept, only the FPN's 1x1
+    input convolutions start from scratch. A timm encoder is trained whole (``trainable_layers`` does not apply)."""
     from torchvision.models.detection import MaskRCNN_ResNet50_FPN_V2_Weights, maskrcnn_resnet50_fpn_v2
     from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
     from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
@@ -38,6 +63,10 @@ def build_maskrcnn(pretrained: bool = True, trainable_layers: int = 3, detection
         box_detections_per_img=detections_per_img,
         box_score_thresh=score_thresh,
     )
+    if backbone != "resnet50":
+        new = TimmFPNBackbone(backbone, pretrained)
+        new.fpn.layer_blocks.load_state_dict(model.backbone.fpn.layer_blocks.state_dict())
+        model.backbone = new
     in_features = model.roi_heads.box_predictor.cls_score.in_features
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, 2)
     model.roi_heads.mask_predictor = MaskRCNNPredictor(256, 256, 2)
