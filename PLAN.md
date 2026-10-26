@@ -311,8 +311,9 @@ ConvNeXt U-Net 0.422 (0.439 with classifier), U-Net ensemble + classifier 0.449:
 - [ ] D2 — Several fold models of the best detector, merged.
 - [x] D3 — Map averaging with the U-Net ensemble + classifier *(tried: best result)*: first Mask R-CNN ≤ +0.005;
       whole-backbone Mask R-CNN **nested 0.461, LB 0.39** (best so far) → the final recipe.
-- [ ] D4 — Explicit pixel-overlap check in `validate_submission` (pipeline is overlap-free by construction; verified
-      0 overlapping pixels in the submitted files).
+- [x] D4 — Explicit pixel-overlap check in `validate_submission` *(done 2026-10-26)*: pairwise RLE IoU finds candidate
+      pairs, only those are decoded; reports pairs / images / shared pixels; tested; run by `make_submission.py` and the
+      notebooks. The final candidates have 0 overlapping pixels (the pipeline is overlap-free by construction).
 
 **Order (updated 2026-10-18):** 5 folds of the final recipe (whole-backbone Mask R-CNN + ConvNeXt U-Net, folds 1–4)
 on Kaggle, while D4, D1 and B2 are built locally → B2 screen if ready → A2 if there is headroom → from ~Oct 29:
