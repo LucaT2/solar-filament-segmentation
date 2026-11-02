@@ -40,13 +40,12 @@ code("""
 # ---- configuration ---------------------------------------------------------------------------------------
 # Each experiment: a config from the repo, the folds to train (cross-validation, with validation) and/or seeds of
 # full-data models (all 707 images, no validation). Jobs of all experiments are spread over the GPUs.
-EXPERIMENTS = [   # last screens, fold 0 (part 2 of 2; part 1 in kaggle_screen.ipynb), compared locally with the
-    # whole-backbone Mask R-CNN's fold 0. GPU 0: pseudo-label student with full real exposure (~7.8 h; needs the
-    # private dataset solar-filament-pseudo as an input). GPU 1: 112 px mask head + copy-paste (~6.5 h).
-    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m56_ftall_pseudo_full.yaml", "folds": [0],
-     "full_seeds": [], "overrides": [], "gpus": [0]},
-    {"config": "configs/detection/maskrcnn/maskrcnn_r50_v2_m112_ftall_cp.yaml", "folds": [0], "full_seeds": [],
-     "overrides": [], "gpus": [1]},
+EXPERIMENTS = [   # the efficient single-model pipeline: DINOv3 Mask R-CNN on all 707 images, seeds 42 (GPU 0) and 43
+    # (GPU 1). Same recipe as its fold-0 model (LB 0.39 with TTA), whose run validated 29 epochs at ~620 s each, flat
+    # from epoch 18 on, so the full-data models keep their last epoch: 29 epochs, ~5.0 h (no validation passes;
+    # fit_epochs off, since its estimate assumes validations and would shorten the schedule; max_hours only as a guard)
+    {"config": "configs/detection/maskrcnn/maskrcnn_dinov3_convnext_t_m56.yaml", "folds": [], "full_seeds": [42, 43],
+     "overrides": ["epochs=29", "fit_epochs=false", "max_hours=6.5"]},
 ]
 # attached inputs with earlier experiment results, matched by "<notebook>/<experiment>" in their path
 # (Add Input -> Your Work -> Notebooks); none needed (comparisons are made locally)
