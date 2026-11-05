@@ -1,6 +1,6 @@
-"""Download the 15 checkpoints of the submitted pipeline from the GitHub release into outputs/, checking their sha256.
+"""Download the checkpoint of the submitted pipeline from the GitHub release into outputs/, checking its sha256.
 
-Files already present with the right hash are skipped, so it is safe to run twice. Needs no account or token.
+A file already present with the right hash is skipped, so it is safe to run twice. Needs no account or token.
 
 Usage:
     python scripts/final/download_weights.py
@@ -27,7 +27,7 @@ def sha256(path: Path) -> str:
 
 
 def asset_name(checkpoint: str) -> str:
-    """Release assets are flat: ``<experiment>/fold0.pt`` is published as ``<experiment>-fold0.pt``."""
+    """Release assets are flat: ``<experiment>/full_s42.pt`` is published as ``<experiment>-full_s42.pt``."""
     return checkpoint.replace("/", "-")
 
 
@@ -48,7 +48,7 @@ def main() -> None:
             partial.unlink()
             raise SystemExit(f"sha256 mismatch for {checkpoint}")
         partial.replace(target)
-    print(f"{len(manifest['files'])} checkpoints in {get_output_dir()}")
+    print(f"{len(manifest['files'])} checkpoint(s) in {get_output_dir()}")
 
 
 if __name__ == "__main__":

@@ -1,15 +1,13 @@
 """The submitted pipeline in one place: a GONG H-alpha image -> filament masks.
 
-Two complementary model families vote per pixel, then a classifier decides per filament:
+One Mask R-CNN (ConvNeXt-T backbone with DINOv3 weights, FPN, 56 x 56 mask head) trained on all 707 training images:
 
-1. U-Net ensemble: ResNet34 and ConvNeXt-T encoders, 5 folds each, 8 views (d8 TTA): a good outline of every candidate.
-2. Mask R-CNN ensemble: 5 folds, 8 views, each model's views merged per filament, then drawn as score-weighted soft
-   masks: object-level confidence, and neighbours kept apart.
-3. Weighted map average (0.4 / 0.6), threshold, connected components, size filter.
-4. Component classifier (gradient boosting on area, shape, contrast, position, site and mean probability) removes
-   components unlikely to match an annotated filament.
+1. Eight views of the image (flips and transposes). Detections of the same filament are merged across views, and a
+   filament's score is the sum of its scores divided by the number of views, so one seen in few views scores low.
+2. Each soft mask is pasted into the image at the mask threshold, highest score first, so instances never overlap.
+3. Instances below the score cut-off are dropped.
 
-The tuned settings and the classifier are committed in ``configs/final/``; the 15 checkpoints are release assets
+The tuned settings are committed in ``configs/final/``; the checkpoint is a release asset
 (``scripts/final/download_weights.py``).
 """
 
@@ -21,80 +19,49 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from filament.data.images import read_image
+from filament.data.images import disk_mask
 from filament.detection.dataset import full_image_input
-from filament.detection.instances import to_prob_map
+from filament.detection.instances import Instances, to_components
 from filament.detection.model import predict_instances
 from filament.detection.train import build_from_config
 from filament.detection.tta import predict_tta
 from filament.paths import REPO_ROOT, resolve_exp_dir
+from filament.postprocess.components import Components
 from filament.postprocess.pipeline import PostConfig, load_postprocess
-from filament.postprocess.rescoring import Rescorer, component_table
-from filament.segmentation.dataset import ImageInfo, image_info, normalize_with
-from filament.segmentation.model import build_model, n_outputs, predict_full
+from filament.segmentation.dataset import ImageInfo, image_info
 
-UNETS = ("unet_r34_skel050", "unet_convnext_t_skel050")
-DETECTOR = "maskrcnn_ftall_5f"
-FOLDS = range(5)
-UNET_WEIGHT, DETECTOR_WEIGHT = 0.4, 0.6
+EXPERIMENT = "maskrcnn_dinov3_convnext_t_m56"
+CHECKPOINT = "full_s42.pt"
 VIEWS = 8
 FINAL_CONFIG_DIR = REPO_ROOT / "configs" / "final"
 
 
-def load_unets(names, folds, device) -> list[torch.nn.Module]:
-    out = []
-    for name in names:
-        for k in folds:
-            state = torch.load(resolve_exp_dir(name) / f"fold{k}.pt", map_location=device)
-            cfg = state["config"]
-            m = build_model(cfg["arch"], cfg["encoder"], pretrained=False, decoder_fp32=cfg.get("decoder_fp32", False),
-                            classes=n_outputs(cfg))
-            m.load_state_dict(state["model"])
-            out.append(m.to(device).eval())
-    return out
-
-
-def load_detectors(folds, device) -> list[torch.nn.Module]:
-    out = []
-    for k in folds:
-        state = torch.load(resolve_exp_dir(DETECTOR) / f"fold{k}.pt", map_location=device)
-        m = build_from_config(state["config"], pretrained=False)
-        m.load_state_dict(state["model"])
-        out.append(m.to(device).eval())
-    return out
-
-
-def detections(models, x, device, views: int) -> list:
-    """Per model: ``views`` views merged per filament (one Instances per model)."""
-    return [predict_tta(lambda v, m=m: predict_instances(m, v, device, torch.float16), x, views) for m in models]
-
-
 @dataclass
 class FinalPipeline:
-    unets: list[torch.nn.Module]
-    detectors: list[torch.nn.Module]
+    model: torch.nn.Module
     cfg: PostConfig
-    rescorer: Rescorer
     device: torch.device
 
     @classmethod
     def load(cls, device: torch.device | str | None = None) -> "FinalPipeline":
         device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
-        return cls(load_unets(UNETS, FOLDS, device), load_detectors(FOLDS, device),
-                   load_postprocess(FINAL_CONFIG_DIR / "postprocess.json"),
-                   Rescorer.load(FINAL_CONFIG_DIR / "rescorer.pkl"), device)
+        state = torch.load(resolve_exp_dir(EXPERIMENT) / CHECKPOINT, map_location=device)
+        model = build_from_config(state["config"], pretrained=False)
+        model.load_state_dict(state["model"])
+        return cls(model.to(device).eval(), load_postprocess(FINAL_CONFIG_DIR / "postprocess.json"), device)
 
-    def maps(self, path: Path, info: ImageInfo | None = None) -> tuple[np.ndarray, np.ndarray]:
-        """The two ensembles' probability maps of one image: (U-Net, Mask R-CNN)."""
-        info = info or image_info(path)
-        unet = predict_full(self.unets, normalize_with(read_image(path), info), self.device, "d8")
-        per_model = detections(self.detectors, full_image_input(info), self.device, VIEWS)
-        return unet, np.mean([to_prob_map(i) for i in per_model], axis=0)
+    def detect(self, path: Path, info: ImageInfo | None = None) -> Instances:
+        """All detections of one image, merged across the views."""
+        x = full_image_input(info or image_info(path))
+        return predict_tta(lambda v: predict_instances(self.model, v, self.device, torch.float16), x, VIEWS)
+
+    def components(self, detections: Instances, info: ImageInfo) -> Components:
+        """Detections as non-overlapping instances on the solar disk, before the score cut-off."""
+        region = disk_mask((2048, 2048), info.disk, self.cfg.disk_scale)
+        return to_components(detections, self.cfg.threshold, region)
 
     def segment(self, path: Path) -> list[np.ndarray]:
         """Binary masks of the filaments found in one image."""
         info = image_info(path)
-        unet, detector = self.maps(path, info)
-        prob = UNET_WEIGHT * unet + DETECTOR_WEIGHT * detector
-        comps, table = component_table(path.stem, prob, read_image(path), self.cfg, info.disk)
-        return [comps.labels == i for i in self.rescorer.keep_ids(table)]
+        comps = self.components(self.detect(path, info), info)
+        return [comps.labels == i for i in comps.keep(self.cfg.min_area, self.cfg.min_score)]

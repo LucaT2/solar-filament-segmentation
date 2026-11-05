@@ -1,20 +1,6 @@
 {
-  "release": "https://github.com/LucaT2/solar-filament-segmentation/releases/download/v1.0-weights",
+  "release": "https://github.com/LucaT2/solar-filament-segmentation/releases/download/v2.0-weights",
   "files": {
-    "unet_r34_skel050/fold0.pt": "044a70559a8d603e19d4deef3b7ac886fc825573c9f69444d603ed4a104142b3",
-    "unet_r34_skel050/fold1.pt": "fd028a6e88cce2232385aa2c6245fe05cf422f1a939143c5efe42db22cfafe29",
-    "unet_r34_skel050/fold2.pt": "f164f2730d9dab7204cdb96c68c78d26474d5b6e34bc22e346de87ad5bf5581e",
-    "unet_r34_skel050/fold3.pt": "a6a7e919cb08c430a02f25b44a697eb486fbc290e34faf1eb9df402324d0fd14",
-    "unet_r34_skel050/fold4.pt": "1f676bcbea2f98507b35d0cf644be814ba4a04c25b10b52aa24e900dcf3f6223",
-    "unet_convnext_t_skel050/fold0.pt": "10d83c3ad3f605f16e877c6fafabc0e68902e69d98c2e0706ff43a3c525353a3",
-    "unet_convnext_t_skel050/fold1.pt": "59065e374c0edf222b9bbb87e58e7c5109c912393651c459a2de10d9881817f5",
-    "unet_convnext_t_skel050/fold2.pt": "136a7124e98dcda064b575d5dbd9c7abeaca15026a5df775a74736288bb688fb",
-    "unet_convnext_t_skel050/fold3.pt": "11227f95272e34b287852289557b70964864a502adbfaecc3e7ace54d8196885",
-    "unet_convnext_t_skel050/fold4.pt": "98edd782aa7e8c614bbaca6ec8f5889e11cf9c111837fb358c65535b69286f12",
-    "maskrcnn_ftall_5f/fold0.pt": "69eeaa4be299be9dc399dbf99e0adca6812638fdcd6b6dbf2cf325d0f0f9ae1d",
-    "maskrcnn_ftall_5f/fold1.pt": "40057371401772df1b4684e904935e0d3a942e163c3eaef63624796c8decd727",
-    "maskrcnn_ftall_5f/fold2.pt": "1cac8a029ee3ab478a533ffdac019e212f5046da2c871f8496928da85309e0dd",
-    "maskrcnn_ftall_5f/fold3.pt": "71764cda5c732d026c32d57bd366cd33e2d4551b17600185bad1eb3fcf20a154",
-    "maskrcnn_ftall_5f/fold4.pt": "87abd45386b279b2c04caf11f1660606161562d4753855d8f7be29aa1b857499"
+    "maskrcnn_dinov3_convnext_t_m56/full_s42.pt": "f4a68e24a40008a11bad379483cc79633b77f6116868d1ecab8ad7018a9d5bef"
   }
 }

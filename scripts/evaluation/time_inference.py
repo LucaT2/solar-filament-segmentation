@@ -4,6 +4,7 @@ Pipelines (the same functions as the submissions; checkpoints and tuned settings
 * ``detector_5f_tta8`` (submission_det5f_tta): Mask R-CNN, 5 fold models x 8 views, merged per filament, score cut-off.
 * ``w40_classifier`` (submission_final_w40): U-Net ResNet34 + ConvNeXt (5 folds each, 8 views) and the detector maps
   (5 folds x 8 views, score-weighted soft masks), averaged 0.4 / 0.6, components + classifier.
+* ``dino_full_tta8`` (the submitted pipeline, filament.final): one full-data Mask R-CNN, 8 views, score cut-off.
 * light variants: ``detector_1model`` (fold 0, one view) and ``unet_1model`` (ConvNeXt fold 0, one view, no classifier).
 
 Stages: load (JPEG + disk + normalisation, CPU), unet, detector, merge (views / folds -> one list or map), post
@@ -29,13 +30,42 @@ from filament.data.images import disk_mask, read_image
 from filament.data.submission import instances_to_rows
 from filament.detection.dataset import full_image_input
 from filament.detection.instances import to_components, to_prob_map
-from filament.detection.tta import merge_views
-from filament.final import DETECTOR_WEIGHT, UNET_WEIGHT, UNETS, VIEWS, detections, load_detectors, load_unets
+from filament.detection.model import predict_instances
+from filament.detection.tta import merge_views, predict_tta
+from filament.detection.train import build_from_config
+from filament.final import FINAL_CONFIG_DIR, FinalPipeline
 from filament.paths import get_data_paths, resolve_exp_dir
 from filament.postprocess.pipeline import load_postprocess
 from filament.postprocess.rescoring import Rescorer, component_table
 from filament.segmentation.dataset import image_info, normalize_with
-from filament.segmentation.model import predict_full
+from filament.segmentation.model import build_model, n_outputs, predict_full
+
+UNETS = ["unet_r34_skel050", "unet_convnext_t_skel050"]
+DETECTOR = "maskrcnn_ftall_5f"
+
+
+def load_unets(names, folds, device):
+    out = []
+    for name in names:
+        for k in folds:
+            state = torch.load(resolve_exp_dir(name) / f"fold{k}.pt", map_location=device)
+            cfg = state["config"]
+            m = build_model(cfg["arch"], cfg["encoder"], pretrained=False, decoder_fp32=cfg.get("decoder_fp32", False),
+                            classes=n_outputs(cfg))
+            m.load_state_dict(state["model"])
+            out.append(m.to(device).eval())
+    return out
+
+
+def load_detectors(folds, device):
+    out = []
+    for k in folds:
+        state = torch.load(resolve_exp_dir(DETECTOR) / f"fold{k}.pt", map_location=device)
+        m = build_from_config(state["config"], pretrained=False)
+        m.load_state_dict(state["model"])
+        out.append(m.to(device).eval())
+    return out
+
 
 class Clock:
     def __init__(self, device):
@@ -50,6 +80,11 @@ class Clock:
             torch.cuda.synchronize()
         self.times[stage] += time.perf_counter() - t
         return out
+
+
+def detections(models, x, device, views):
+    """Per model: ``views`` views merged per filament (one Instances per model)."""
+    return [predict_tta(lambda v, m=m: predict_instances(m, v, device, torch.float16), x, views) for m in models]
 
 
 def encode(stem, labels, ids):
@@ -79,9 +114,9 @@ def run_w40(clock, path, unets, detectors, cfg, rescorer, device):
     img = clock("load", read_image, path)
     u = clock("unet", predict_full, unets, normalize_with(img, info), device, "d8")
     x = clock("load", full_image_input, info)
-    per_model = clock("detector", detections, detectors, x, device, VIEWS)
+    per_model = clock("detector", detections, detectors, x, device, 8)
     d = clock("merge", lambda insts: np.mean([to_prob_map(i) for i in insts], axis=0), per_model)
-    prob = UNET_WEIGHT * u + DETECTOR_WEIGHT * d
+    prob = 0.4 * u + 0.6 * d
     comps, table = clock("post", component_table, path.stem, prob, img, cfg, info.disk)
     return clock("post", encode, path.stem, comps.labels, clock("post", rescorer.keep_ids, table))
 
@@ -90,6 +125,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--images", type=int, default=20, help="test images timed (after 2 warm-up images)")
     parser.add_argument("--out", default="outputs/inference_timing.csv")
+    parser.add_argument("--only", nargs="*", help="time only these pipelines")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -99,8 +135,11 @@ def main() -> None:
     cfg_w40, rescorer = load_postprocess(w40 / "postprocess.json"), Rescorer.load(w40 / "rescorer.pkl")
     cfg_det = load_postprocess(resolve_exp_dir("det5f_tta") / "postprocess.json")
     cfg_unet = load_postprocess(resolve_exp_dir("unet5f_d8") / "postprocess.json")
+    cfg_final = load_postprocess(FINAL_CONFIG_DIR / "postprocess.json")
 
     pipelines = {
+        "dino_full_tta8": lambda: (lambda c, p, m=[FinalPipeline.load(device).model]: run_detector(
+            c, p, m, 8, cfg_final, device)),
         "detector_1model": lambda: (lambda c, p, m=load_detectors([0], device): run_detector(c, p, m, 1, cfg_det,
                                                                                                device)),
         "detector_5f_tta8": lambda: (lambda c, p, m=load_detectors(range(5), device): run_detector(c, p, m, 8, cfg_det,
@@ -112,6 +151,8 @@ def main() -> None:
     }
     rows = []
     for name, build in pipelines.items():
+        if args.only and name not in args.only:
+            continue
         if device.type == "cuda":
             torch.cuda.empty_cache()
             torch.cuda.reset_peak_memory_stats()

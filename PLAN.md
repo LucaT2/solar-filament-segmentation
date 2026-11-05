@@ -351,18 +351,23 @@ head and watershed. The PQ levers are boundary precision (±1 px), connectivity,
       test set (180 images): 1.3 / 47 / 2.0 / 77 min. Quality per pipeline (707 OOF images): one detector without TTA
       ~0.438–0.444 vs 0.452 with 5 folds × TTA → 35× faster for −0.01 PQ. CPU stages (JPEG, disk fit, components,
       classifier, encoding) are < 0.4 s.
-- [x] **Final pick (2026-11-05): one selectable submission, `submission_final_w40.csv`** (LB 0.39; ResNet34 + ConvNeXt
-      U-Nets + Mask R-CNN, 15 models, classifier; tuned on all 707 OOF images, test calibration matches). Paired image
-      bootstrap, each scored as submitted: on 707 images the 5-fold R50 detector ties it (ΔPQ −0.001 [−0.006, +0.004]);
-      on fold 0 the DINOv3 detector with TTA is −0.006 [−0.019, +0.006] vs final_w40, n:1 merges 2.9% vs 2.2% (fold 0
-      vs all images). U-Net ensemble + full-data DINOv3 (`cmb_dino_w40_f0`) is +0.007 [−0.003, +0.017] on fold 0 but its
-      settings were tuned on those 142 images; 7.19 filaments per test image vs 6.50 on OOF. OOF scores one fold model per
-      image, so they do not count the fold ensemble's benefit at test time, which only the two ensembles get. The single
-      DINOv3 model (LB 0.39, 2.2 s per image) stays in the report as the efficient alternative.
+- [x] **Final pick (2026-11-05, the user's decision): one selectable submission,
+      `submission_mrcnn_dino_full_s42.csv`** (full-data DINOv3 Mask R-CNN, seed 42, 8 views, thr 0.45, score 0.8, no
+      classifier; LB 0.39; measured 2.32 s per image, 7 min for the test set, 1.45 GiB peak, RTX 5070 Laptop, 40 images).
+      Against `final_w40` (LB 0.39, 25.7 s per image, 15 models, classifier): the rubric's 70% lists mean Dice, PQ and the
+      Dice / IoU / 1:n / n:1 distributions, while efficiency appears only in the Overview. Paired on fold 0, each scored as
+      submitted: fold-0 DINOv3 detector −0.006 [−0.019, +0.006] vs final_w40, so the PQ gap is not resolved and the
+      full-data model's extra 25% of images cannot be measured. Chosen for speed, simplicity and a real end-to-end
+      reproduction. Rubric metrics of the fold-0 model on 142 images: `notes/results/dino_fold0/` (PQ 0.452, SQ 0.685,
+      RQ 0.660, 1:n 3.9%, n:1 2.9%). Pixel-Dice comparison of the two was stopped by the user before it ran.
 - [ ] Repo cleanup: docs, modular code, pinned `requirements.txt`, reproducible end-to-end notebook.
       Rule (Final Submission tab): "The committee should not require any additional file to reproduce the submitted
-      predictions", so the checkpoints are downloaded by `scripts/final/download_weights.py` from a GitHub release;
-      `filament.final` + `scripts/final/predict.py` go from images to CSV.
+      predictions", so the checkpoint is downloaded by `scripts/final/download_weights.py` from the GitHub release
+      `v2.0-weights`; `filament.final` + `scripts/final/predict.py` go from images to CSV and reproduce the submitted file
+      byte for byte on the local machine (1,308 of 1,308 masks). The checkpoint is a derivative of DINOv3 weights, so it is
+      distributed under the DINOv3 License (`LICENSES/DINOv3_LICENSE.md`, attached to the release), with "Built with
+      DINOv3" in the README; the report must acknowledge DINOv3. Release `v1.0-weights` holds the 15 `final_w40` checkpoints,
+      which nothing uses now. Still to test once the repo is public: `download_weights.py` from a clean folder.
 - [ ] 4-page technical report (Overleaf template) → PDF.
 - [ ] Google form submission before Nov 15; repo public until winners are announced (Nov 30).
 

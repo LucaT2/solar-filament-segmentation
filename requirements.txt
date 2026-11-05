@@ -4,7 +4,6 @@
 #
 # pandas and scikit-learn are held at older releases: on Windows with Smart App Control enabled,
 # the DLLs in the newest releases (pandas 3.0.6, scikit-learn 1.9.1) were blocked as not yet reputable.
-# scikit-learn must stay at this version: configs/final/rescorer.pkl was fitted with it.
 torch==2.11.0
 torchvision==0.26.0
 segmentation-models-pytorch==0.5.0

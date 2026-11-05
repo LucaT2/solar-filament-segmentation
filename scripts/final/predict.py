@@ -1,8 +1,8 @@
 """Run the submitted pipeline (filament.final) on a folder of images and write the submission CSV.
 
 Usage:
-    python scripts/final/download_weights.py                             # once: the 15 checkpoints into outputs/
-    python scripts/final/predict.py --out outputs/submission_final.csv   # all test images, ~26 s per image on a GPU
+    python scripts/final/download_weights.py                             # once: the checkpoint into outputs/
+    python scripts/final/predict.py --out outputs/submission_final.csv   # all test images, ~2 s per image on a GPU
     python scripts/final/predict.py --limit 3                            # a quick check on 3 images
 """
 
