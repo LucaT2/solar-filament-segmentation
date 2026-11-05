@@ -29,41 +29,13 @@ from filament.data.images import disk_mask, read_image
 from filament.data.submission import instances_to_rows
 from filament.detection.dataset import full_image_input
 from filament.detection.instances import to_components, to_prob_map
-from filament.detection.model import predict_instances
-from filament.detection.tta import merge_views, predict_tta
-from filament.detection.train import build_from_config
+from filament.detection.tta import merge_views
+from filament.final import DETECTOR_WEIGHT, UNET_WEIGHT, UNETS, VIEWS, detections, load_detectors, load_unets
 from filament.paths import get_data_paths, resolve_exp_dir
 from filament.postprocess.pipeline import load_postprocess
 from filament.postprocess.rescoring import Rescorer, component_table
 from filament.segmentation.dataset import image_info, normalize_with
-from filament.segmentation.model import build_model, n_outputs, predict_full
-
-UNETS = ["unet_r34_skel050", "unet_convnext_t_skel050"]
-DETECTOR = "maskrcnn_ftall_5f"
-
-
-def load_unets(names, folds, device):
-    out = []
-    for name in names:
-        for k in folds:
-            state = torch.load(resolve_exp_dir(name) / f"fold{k}.pt", map_location=device)
-            cfg = state["config"]
-            m = build_model(cfg["arch"], cfg["encoder"], pretrained=False, decoder_fp32=cfg.get("decoder_fp32", False),
-                            classes=n_outputs(cfg))
-            m.load_state_dict(state["model"])
-            out.append(m.to(device).eval())
-    return out
-
-
-def load_detectors(folds, device):
-    out = []
-    for k in folds:
-        state = torch.load(resolve_exp_dir(DETECTOR) / f"fold{k}.pt", map_location=device)
-        m = build_from_config(state["config"], pretrained=False)
-        m.load_state_dict(state["model"])
-        out.append(m.to(device).eval())
-    return out
-
+from filament.segmentation.model import predict_full
 
 class Clock:
     def __init__(self, device):
@@ -78,11 +50,6 @@ class Clock:
             torch.cuda.synchronize()
         self.times[stage] += time.perf_counter() - t
         return out
-
-
-def detections(models, x, device, views):
-    """Per model: ``views`` views merged per filament (one Instances per model)."""
-    return [predict_tta(lambda v, m=m: predict_instances(m, v, device, torch.float16), x, views) for m in models]
 
 
 def encode(stem, labels, ids):
@@ -112,9 +79,9 @@ def run_w40(clock, path, unets, detectors, cfg, rescorer, device):
     img = clock("load", read_image, path)
     u = clock("unet", predict_full, unets, normalize_with(img, info), device, "d8")
     x = clock("load", full_image_input, info)
-    per_model = clock("detector", detections, detectors, x, device, 8)
+    per_model = clock("detector", detections, detectors, x, device, VIEWS)
     d = clock("merge", lambda insts: np.mean([to_prob_map(i) for i in insts], axis=0), per_model)
-    prob = 0.4 * u + 0.6 * d
+    prob = UNET_WEIGHT * u + DETECTOR_WEIGHT * d
     comps, table = clock("post", component_table, path.stem, prob, img, cfg, info.disk)
     return clock("post", encode, path.stem, comps.labels, clock("post", rescorer.keep_ids, table))
 

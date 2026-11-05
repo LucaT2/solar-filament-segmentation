@@ -1,0 +1,9 @@
+{
+  "min_p": 0.4,
+  "oof_pq": 0.4533029951184204,
+  "oof_pq_nested": 0.45166250552821186,
+  "oof_pq_without": 0.43278158057071947,
+  "n_images": 707,
+  "n_folds": 5,
+  "n_components": 8126
+}

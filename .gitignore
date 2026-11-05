@@ -17,6 +17,7 @@ wandb/
 *.pt
 *.ckpt
 submission*.csv
+!submissions/*.csv
 
 # Python
 __pycache__/

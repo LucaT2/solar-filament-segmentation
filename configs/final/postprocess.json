@@ -1,0 +1,9 @@
+{
+  "threshold": 0.6,
+  "min_area": 400,
+  "min_score": 0.0,
+  "disk_scale": 1.0,
+  "link_px": 0,
+  "oof_pq": 0.43278158057071947,
+  "n_images": 707
+}

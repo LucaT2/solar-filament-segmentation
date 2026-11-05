@@ -351,7 +351,18 @@ head and watershed. The PQ levers are boundary precision (±1 px), connectivity,
       test set (180 images): 1.3 / 47 / 2.0 / 77 min. Quality per pipeline (707 OOF images): one detector without TTA
       ~0.438–0.444 vs 0.452 with 5 folds × TTA → 35× faster for −0.01 PQ. CPU stages (JPEG, disk fit, components,
       classifier, encoding) are < 0.4 s.
+- [x] **Final pick (2026-11-05): one selectable submission, `submission_final_w40.csv`** (LB 0.39; ResNet34 + ConvNeXt
+      U-Nets + Mask R-CNN, 15 models, classifier; tuned on all 707 OOF images, test calibration matches). Paired image
+      bootstrap, each scored as submitted: on 707 images the 5-fold R50 detector ties it (ΔPQ −0.001 [−0.006, +0.004]);
+      on fold 0 the DINOv3 detector with TTA is −0.006 [−0.019, +0.006] vs final_w40, n:1 merges 2.9% vs 2.2% (fold 0
+      vs all images). U-Net ensemble + full-data DINOv3 (`cmb_dino_w40_f0`) is +0.007 [−0.003, +0.017] on fold 0 but its
+      settings were tuned on those 142 images; 7.19 filaments per test image vs 6.50 on OOF. OOF scores one fold model per
+      image, so they do not count the fold ensemble's benefit at test time, which only the two ensembles get. The single
+      DINOv3 model (LB 0.39, 2.2 s per image) stays in the report as the efficient alternative.
 - [ ] Repo cleanup: docs, modular code, pinned `requirements.txt`, reproducible end-to-end notebook.
+      Rule (Final Submission tab): "The committee should not require any additional file to reproduce the submitted
+      predictions", so the checkpoints are downloaded by `scripts/final/download_weights.py` from a GitHub release;
+      `filament.final` + `scripts/final/predict.py` go from images to CSV.
 - [ ] 4-page technical report (Overleaf template) → PDF.
 - [ ] Google form submission before Nov 15; repo public until winners are announced (Nov 30).
 

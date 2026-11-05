@@ -9,7 +9,7 @@ description = "Solar filament instance segmentation for the Kaggle Solar Filamen
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Luca Tasadan", email = "luca.tasadan@gmail.com" }]
-# Runtime dependencies are pinned in requirements.txt (torch is installed separately per CUDA version).
+# Runtime dependencies are pinned in requirements.txt.
 
 [tool.setuptools.packages.find]
 where = ["src"]

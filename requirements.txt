@@ -1,9 +1,12 @@
 # Runtime dependencies (tested with Python 3.12.10).
-# PyTorch is installed separately to match the CUDA version, e.g.:
+# For a specific CUDA build, install PyTorch first, e.g. (needed for RTX 50-series GPUs):
 #   pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128
 #
 # pandas and scikit-learn are held at older releases: on Windows with Smart App Control enabled,
 # the DLLs in the newest releases (pandas 3.0.6, scikit-learn 1.9.1) were blocked as not yet reputable.
+# scikit-learn must stay at this version: configs/final/rescorer.pkl was fitted with it.
+torch==2.11.0
+torchvision==0.26.0
 segmentation-models-pytorch==0.5.0
 timm==1.0.30
 albumentations==2.0.8
