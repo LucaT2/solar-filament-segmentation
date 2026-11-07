@@ -368,6 +368,12 @@ head and watershed. The PQ levers are boundary precision (±1 px), connectivity,
       distributed under the DINOv3 License (`LICENSES/DINOv3_LICENSE.md`, attached to the release), with "Built with
       DINOv3" in the README; the report must acknowledge DINOv3. Release `v1.0-weights` (the 15 `final_w40` checkpoints)
       was deleted on 2026-11-07, as nothing used it. Still to test once the repo is public: `download_weights.py` from a clean folder.
+      Clean-install check on Kaggle (2026-11-07, `notebooks/kaggle/kaggle_check_pipeline.ipynb`, commit d72171a, T4,
+      Python 3.13.16): `pip install -r requirements.txt` OK (torch 2.11.0+cu130 sees the GPU; the only pip warnings are
+      conflicts with unrelated preinstalled Kaggle packages), checkpoint hash OK, the walk-through ran without errors in
+      12.5 min. On the T4 the regenerated CSV is not byte-identical (1,307 vs 1,308 filaments, 854 masks identical,
+      agreement with the submitted file PQ 0.996): fp16 numerics differ between GPUs, and a few detections sit at the
+      score and mask thresholds.
 - [ ] 4-page technical report (Overleaf template) → PDF.
 - [ ] Google form submission before Nov 15; repo public until winners are announced (Nov 30).
 

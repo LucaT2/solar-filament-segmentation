@@ -40,7 +40,9 @@ against the others, on all multi-annotated images.
 Fold 0 is slightly easier than the average fold, so read 0.452 as an upper estimate for the fold-0 model.
 
 **Inference:** 2.3 s per 2048×2048 image on an RTX 5070 Laptop GPU, 7 minutes for the 180 test images, 1.45 GiB peak GPU
-memory. Running `scripts/final/predict.py` on that machine reproduces the submitted CSV byte for byte.
+memory. Running `scripts/final/predict.py` on that machine reproduces the submitted CSV byte for byte. On another GPU
+the half-precision numerics differ slightly: from a fresh install on a Kaggle T4, the regenerated file agrees with the
+submitted one at PQ 0.996 (1,307 vs 1,308 filaments), and the whole walk-through runs in 12.5 minutes.
 
 **Why one model.** An ensemble of 15 models (U-Nets + Mask R-CNN, with a component classifier) reached the same public
 LB of 0.39 at 25.7 s per image, 11× slower. On held-out images its PQ advantage was too small to resolve:
