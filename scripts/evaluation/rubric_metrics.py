@@ -8,8 +8,9 @@ fitted on the other folds, as in fit_rescorer.py), so nothing is scored in-sampl
 
 Usage:
     python scripts/evaluation/rubric_metrics.py --exp final_w40 final_w60 det5f_tta --human --out outputs/rubric
-Outputs (--out): summary.csv (one row per experiment), by_group.csv, distributions.csv and <exp>.npz (per-pair IoU,
-per-filament best IoU / area, degrees) for the report's figures.
+Outputs (--out): summary.csv (one row per experiment), by_group.csv, distributions.csv, <exp>.npz (per-pair IoU,
+per-filament best IoU / area, degrees) and <exp>_images.csv (TP / FP / FN / IoU sum / pixel Dice per annotator-image,
+for bootstrap intervals) for the report's figures (scripts/figures/report_figures.py).
 """
 
 from __future__ import annotations
@@ -158,6 +159,11 @@ def describe(name: str, images: list[ImageScore], dice: dict[str, float], areas:
                      **{f"deg{k}" if k < 4 else "deg4+": int(c) for k, c in enumerate(counts)}})
     np.savez_compressed(out / f"{name}.npz", overlap_iou=iou, matched_iou=tp_iou, gt_best_iou=best, gt_area=area,
                         gt_degree=gt_deg, pred_degree=pred_deg, pixel_dice=pdice)
+    pd.DataFrame({"annotator_image": [s.key for s in images], "n_gt": [s.n_gt for s in images],
+                  "n_pred": [s.n_pred for s in images], "tp": [len(s.tp_ious) for s in images],
+                  "fp": [s.fp for s in images], "fn": [s.fn for s in images],
+                  "iou_sum": [float(s.tp_ious.sum()) for s in images], "pixel_dice": pdice,
+                  "n_annotators": [n_ann[s.key] for s in images]}).to_csv(out / f"{name}_images.csv", index=False)
     return row, pd.concat(groups, ignore_index=True), pd.DataFrame(dist)
 
 

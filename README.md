@@ -93,7 +93,7 @@ python scripts/final/predict.py
 ```
 
 To compare two experiments on the same images, use `scripts/evaluation/compare.py` (paired ΔPQ with a bootstrap
-confidence interval). `scripts/evaluation/rubric_metrics.py` computes the table above, and
+confidence interval). `scripts/evaluation/rubric_metrics.py` computes the table above, `scripts/figures/report_figures.py` the report's figures and 95% intervals, and
 `scripts/evaluation/time_inference.py` the timing. Results are in [notes/results/](notes/results/).
 
 Runs are logged to Weights & Biases when credentials are available; otherwise nothing is logged.
