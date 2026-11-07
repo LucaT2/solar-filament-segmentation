@@ -366,8 +366,8 @@ head and watershed. The PQ levers are boundary precision (±1 px), connectivity,
       `v2.0-weights`; `filament.final` + `scripts/final/predict.py` go from images to CSV and reproduce the submitted file
       byte for byte on the local machine (1,308 of 1,308 masks). The checkpoint is a derivative of DINOv3 weights, so it is
       distributed under the DINOv3 License (`LICENSES/DINOv3_LICENSE.md`, attached to the release), with "Built with
-      DINOv3" in the README; the report must acknowledge DINOv3. Release `v1.0-weights` holds the 15 `final_w40` checkpoints,
-      which nothing uses now. Still to test once the repo is public: `download_weights.py` from a clean folder.
+      DINOv3" in the README; the report must acknowledge DINOv3. Release `v1.0-weights` (the 15 `final_w40` checkpoints)
+      was deleted on 2026-11-07, as nothing used it. Still to test once the repo is public: `download_weights.py` from a clean folder.
 - [ ] 4-page technical report (Overleaf template) → PDF.
 - [ ] Google form submission before Nov 15; repo public until winners are announced (Nov 30).
 

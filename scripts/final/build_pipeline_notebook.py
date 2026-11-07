@@ -1,6 +1,7 @@
-"""Generate notebooks/solar_filament_pipeline.ipynb, the end-to-end walk-through of the submitted pipeline.
+"""Generate notebooks/solar_filament_pipeline.ipynb, the end-to-end walk-through of the submitted pipeline, and
+notebooks/kaggle/kaggle_check_pipeline.ipynb, which runs that walk-through on Kaggle from a fresh install.
 
-Edit the notebook here, then run it from the repo root so its outputs are saved:
+Edit the notebooks here, then run the walk-through from the repo root so its outputs are saved:
     python scripts/final/build_pipeline_notebook.py
     jupyter nbconvert --to notebook --execute --inplace notebooks/solar_filament_pipeline.ipynb \
         --ExecutePreprocessor.timeout=-1
@@ -75,8 +76,10 @@ from filament.data.folds import load_folds
 from filament.data.images import read_image
 from filament.data.rle import rle_to_mask
 from filament.data.submission import read_submission, validate_submission
+from filament.data.images import disk_mask
+from filament.detection import tta
 from filament.detection.dataset import full_image_input
-from filament.detection.instances import to_prob_map
+from filament.detection.instances import to_components, to_prob_map
 from filament.detection.model import predict_instances
 from filament.evaluation.metric import pq_score
 from filament.final import FINAL_CONFIG_DIR, VIEWS, FinalPipeline
@@ -164,21 +167,48 @@ print(cfg)"""),
 
     ("md", """## 6. One image, stage by stage
 
-Detections are merged across 8 views, and a filament's score is the sum of its scores divided by the number of views,
-so a filament seen in only a few views scores low. Each soft mask is then pasted at the mask threshold, highest score
-first, so instances never overlap. Finally, instances under the score cut-off are dropped."""),
+The model is a torchvision Mask R-CNN whose ResNet50 is replaced by a timm ConvNeXt-T with DINOv3 weights. Images go
+in at full resolution (2048×2048, not resized), because filaments are only about 8 px wide."""),
     ("code", """pipeline = FinalPipeline.load()
-path = paths.test_images / "20140420195854Bh.jpeg"
-info = image_info(path)
+model, device = pipeline.model, pipeline.device
+
+
+def millions(*modules):
+    return sum(p.numel() for m in modules for p in m.parameters()) / 1e6
+
+
+heads = model.roi_heads
+print(f"backbone  ConvNeXt-T, DINOv3 weights, features at strides 4-32  {millions(model.backbone.body):5.1f} M parameters")
+print(f"FPN       256 channels, 4 levels + 1 pooled level                {millions(model.backbone.fpn):5.1f} M")
+print(f"RPN       anchors -> object proposals                            {millions(model.rpn):5.1f} M")
+print(f"box head  filament vs background, box refinement                 {millions(heads.box_head, heads.box_predictor):5.1f} M")
+print(f"mask head one 56 x 56 soft mask per detection                    {millions(heads.mask_head, heads.mask_predictor):5.1f} M")"""),
+
+    ("md", """This is what `FinalPipeline.segment` does for one image, written out. Detections are merged across 8 views, and a
+filament's score is the sum of its scores divided by the number of views, so one seen in only a few views scores low.
+Each soft mask is pasted at the mask threshold, highest score first, so instances never overlap. Instances under the
+score cut-off are dropped."""),
+    ("code", """path = paths.test_images / "20140420195854Bh.jpeg"
+info = image_info(path)        # finds the solar disk; mean and spread of the on-disk brightness
+x = full_image_input(info)     # (3, 2048, 2048): the normalised image repeated to 3 channels
 img = read_image(path)
 
-one_view = predict_instances(pipeline.model, full_image_input(info), pipeline.device, torch.float16)
-detections = pipeline.detect(path, info)
-comps = pipeline.components(detections, info)
-keep = set(comps.keep(cfg.min_area, cfg.min_score).tolist())
-print(f"{len(one_view)} detections in one view, {len(detections)} after merging {VIEWS} views, "
-      f"{comps.n} instances on the disk, {len(keep)} above the score cut-off")
+per_view = []
+for view in tta.VIEWS[VIEWS]:  # (transpose, flip_x, flip_y)
+    found = predict_instances(model, tta.view_image(x, view), device, torch.float16)
+    per_view.append(tta.unview_instances(found, view, x.shape[-2:]))   # back to the original orientation
+detections = tta.merge_views(per_view)
 
+region = disk_mask(img.shape, info.disk, cfg.disk_scale)               # only the solar disk
+comps = to_components(detections, cfg.threshold, region)               # pasted masks, no overlaps
+keep = comps.keep(cfg.min_area, cfg.min_score)
+masks = [comps.labels == i for i in keep]
+
+print("detections per view:", [len(v) for v in per_view])
+print(f"{len(detections)} after merging, {comps.n} instances on the disk, {len(keep)} above score {cfg.min_score}")
+same = [np.array_equal(a, b) for a, b in zip(masks, pipeline.segment(path))]
+print(f"identical to FinalPipeline.segment: {len(same) == len(masks) and all(same)}")"""),
+    ("code", """kept = set(keep.tolist())
 fig, axes = plt.subplots(1, 3, figsize=(15, 5.4))
 axes[0].imshow(img, cmap="gray")
 axes[0].set_title("input", fontsize=10)
@@ -186,14 +216,14 @@ axes[1].imshow(to_prob_map(detections), cmap="magma", vmin=0, vmax=1)
 axes[1].set_title(f"{VIEWS} views merged: score-weighted soft masks", fontsize=10)
 axes[2].imshow(img, cmap="gray")
 for i in range(1, comps.n + 1):
-    outline(axes[2], comps.labels == i, "lime" if i in keep else "red")
-axes[2].set_title(f"green: {len(keep)} kept; red: {comps.n - len(keep)} below score {cfg.min_score}", fontsize=10)
+    outline(axes[2], comps.labels == i, "lime" if i in kept else "red")
+axes[2].set_title(f"green: {len(kept)} kept; red: {comps.n - len(kept)} below score {cfg.min_score}", fontsize=10)
 for ax in axes:
     ax.axis("off")
 plt.tight_layout()
 plt.show()"""),
     ("code", """pd.DataFrame({"score": comps.mean_prob[1:], "area_px": comps.area[1:],
-              "kept": [i in keep for i in range(1, comps.n + 1)]}).sort_values("score", ascending=False).round(3)"""),
+              "kept": [i in kept for i in range(1, comps.n + 1)]}).sort_values("score", ascending=False).round(3)"""),
 
     ("md", "## 7. The test set"),
     ("code", """del pipeline
@@ -233,13 +263,122 @@ timing[["pipeline", "device", "total_s_per_image", "test_set_min", "peak_gpu_gib
 ]
 
 
+CHECK_CELLS = [
+    ("md", """# Clean-environment check of the submitted pipeline
+
+Runs `notebooks/solar_filament_pipeline.ipynb` the way a reviewer would: a fresh clone, `pip install -r
+requirements.txt`, then the notebook in a new kernel. The executed copy, the regenerated CSV and `check.json` are written
+to the output.
+
+While the repository is private, the clone and the checkpoint download use a GitHub token. Once it is public, the
+walk-through needs neither: its first cell clones the repository and section 5 downloads the checkpoint.
+
+### Settings
+* Accelerator: **GPU T4** (one is enough). Internet: **on**.
+* *Add Input*: competition **filament-segmentation-2026**.
+* *Add-ons → Secrets*: the GitHub token (label `GITHUB_SECRET`). Run with **Save Version → Save & Run All** (~25 min)."""),
+    ("code", """GITHUB_SECRET = "Github_key"
+REPO = "LucaT2/solar-filament-segmentation"
+BRANCH = "main"
+WEIGHTS_TAG = "v2.0-weights"
+
+import hashlib, json, platform, shutil, subprocess, sys, time
+from pathlib import Path
+
+import requests
+from kaggle_secrets import UserSecretsClient
+
+WORK = Path("/kaggle/working")
+ROOT = WORK / "solar-filament-segmentation"
+T0 = time.time()
+report = {"python": platform.python_version()}
+
+
+def log(msg):
+    print(f"[{time.time() - T0:6.0f}s] {msg}", flush=True)
+
+
+def sh(cmd, what, timeout=3600):
+    res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    log(f"{what}: exit {res.returncode}")
+    return res
+
+
+token = UserSecretsClient().get_secret(GITHUB_SECRET)
+gpu = sh(["nvidia-smi", "--query-gpu=name,driver_version,memory.total", "--format=csv,noheader"], "nvidia-smi")
+report["gpu"] = gpu.stdout.strip()
+log(f"Python {report['python']}; GPU {report['gpu']}")"""),
+    ("code", """res = sh(["git", "clone", "--depth", "1", "-b", BRANCH, f"https://x-access-token:{token}@github.com/{REPO}.git",
+          str(ROOT)], "git clone", 300)
+if res.returncode:
+    raise RuntimeError("git clone failed: " + res.stderr.replace(token, "***"))
+report["commit"] = subprocess.run(["git", "-C", str(ROOT), "log", "--oneline", "-1"], capture_output=True,
+                                  text=True).stdout.strip()
+log(f"commit {report['commit']}")
+
+# the checkpoint from the (private) release, where scripts/final/download_weights.py would put it
+headers = {"Authorization": f"Bearer {token}"}
+release = requests.get(f"https://api.github.com/repos/{REPO}/releases/tags/{WEIGHTS_TAG}", headers=headers,
+                       timeout=60).json()
+manifest = json.loads((ROOT / "configs/final/weights.json").read_text())
+for checkpoint, expected in manifest["files"].items():
+    asset = next(a for a in release["assets"] if a["name"] == checkpoint.replace("/", "-"))
+    target = WORK / checkpoint
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with requests.get(asset["url"], headers={**headers, "Accept": "application/octet-stream"}, stream=True,
+                      timeout=600) as r, open(target, "wb") as f:
+        r.raise_for_status()
+        shutil.copyfileobj(r.raw, f, 1 << 24)
+    digest = hashlib.sha256(target.read_bytes()).hexdigest()
+    report["checkpoint_hash_ok"] = digest == expected
+    log(f"{checkpoint}: {target.stat().st_size / 2**20:.0f} MiB, hash ok {digest == expected}")"""),
+    ("code", """before = {p: subprocess.run([sys.executable, "-c", f"import {p}; print({p}.__version__)"], capture_output=True,
+                           text=True).stdout.strip() for p in ("torch", "numpy")}
+log(f"preinstalled: {before}")
+res = sh([sys.executable, "-m", "pip", "install", "-q", "-r", str(ROOT / "requirements.txt")], "pip install -r requirements.txt")
+report["pip_requirements_ok"] = res.returncode == 0
+print(res.stdout[-3000:], res.stderr[-5000:])
+res = sh([sys.executable, "-m", "pip", "install", "-q", "--no-deps", "-e", str(ROOT)], "pip install -e .")
+probe = ("import torch, numpy, timm, cv2, sklearn; print(torch.__version__, torch.version.cuda, "
+         "torch.cuda.is_available(), numpy.__version__, timm.__version__, cv2.__version__, sklearn.__version__)")
+res = sh([sys.executable, "-c", probe], "import check")
+report["versions"] = res.stdout.strip() or res.stderr[-1500:]
+log(f"torch, CUDA, GPU usable, numpy, timm, opencv, sklearn: {report['versions']}")"""),
+    ("code", """executed = WORK / "solar_filament_pipeline_executed.ipynb"
+start = time.time()
+res = sh([sys.executable, "-m", "jupyter", "nbconvert", "--to", "notebook", "--execute",
+          str(ROOT / "notebooks/solar_filament_pipeline.ipynb"), "--output", str(executed),
+          "--ExecutePreprocessor.timeout=-1"], "notebook", 3 * 3600)
+report["notebook_minutes"] = round((time.time() - start) / 60, 1)
+report["notebook_ok"] = res.returncode == 0
+if res.returncode:
+    print(res.stderr[-6000:])
+if executed.exists():
+    for cell in json.loads(executed.read_text())["cells"]:
+        for out in cell.get("outputs", []):
+            text = "".join(out.get("text", ""))
+            if out.get("output_type") == "error":
+                report.setdefault("errors", []).append(f"{out['ename']}: {out['evalue'][:500]}")
+            elif any(k in text for k in ("device:", "identical", "agreement", "validation problems")):
+                print(text)
+                report.setdefault("key_outputs", []).append(text.strip())
+(WORK / "check.json").write_text(json.dumps(report, indent=2))
+print(json.dumps(report, indent=2))"""),
+]
+
+
 def main() -> None:
     nb = nbf.v4.new_notebook(metadata={"kernelspec": {"display_name": "Python 3", "language": "python",
                                                       "name": "python3"}})
     nb.cells = [nbf.v4.new_markdown_cell(src) if kind == "md" else nbf.v4.new_code_cell(src) for kind, src in CELLS]
-    out = Path(__file__).resolve().parents[2] / "notebooks" / "solar_filament_pipeline.ipynb"
-    nbf.write(nb, out)
-    print(out)
+    notebooks = Path(__file__).resolve().parents[2] / "notebooks"
+    nbf.write(nb, notebooks / "solar_filament_pipeline.ipynb")
+    check = nbf.v4.new_notebook(metadata={**nb.metadata, "kaggle": {"accelerator": "nvidiaTeslaT4",
+                                                                    "isInternetEnabled": True}})
+    check.cells = [nbf.v4.new_markdown_cell(src) if kind == "md" else nbf.v4.new_code_cell(src)
+                   for kind, src in CHECK_CELLS]
+    nbf.write(check, notebooks / "kaggle" / "kaggle_check_pipeline.ipynb")
+    print("written", notebooks / "solar_filament_pipeline.ipynb", "and", notebooks / "kaggle" / "kaggle_check_pipeline.ipynb")
 
 
 if __name__ == "__main__":

@@ -117,7 +117,7 @@ configs/
   final/                  tuned settings and checkpoint hash of the submitted pipeline
   folds.csv               the fixed 5-fold split
   segmentation/ detection/  one YAML per experiment; archive/ holds screened-out experiments
-notebooks/                the pipeline walk-through; analysis/ (EDA, error analysis); kaggle/ (training notebooks)
+notebooks/                the pipeline walk-through; analysis/ (EDA, error analysis); kaggle/ (training, clean-install check)
 notes/                    data findings, error analysis, literature, results, figures
 submissions/              the submitted CSV files
 tests/                    metric equivalence, RLE/submission round-trip, folds, post-processing, training parts
