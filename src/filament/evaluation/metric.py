@@ -26,6 +26,8 @@ IOU_THRESHOLD = 0.5
 
 @dataclass
 class ImageScore:
+    """IoU of every ground-truth / predicted instance pair of one image (one annotator image)."""
+
     key: str
     n_gt: int
     n_pred: int
@@ -50,6 +52,8 @@ class ImageScore:
 
 @dataclass
 class PQResult:
+    """Panoptic Quality over a set of images; PQ = SQ x RQ."""
+
     pq: float
     sq: float  # mean IoU of true positives (segmentation quality)
     rq: float  # |TP| / (|TP| + 0.5|FP| + 0.5|FN|) (recognition quality)
@@ -84,6 +88,7 @@ class PQResult:
 
 
 def score_images(images: list[ImageScore]) -> PQResult:
+    """PQ pooled over all images, as the official metric computes it (TP, FP and FN summed, not averaged)."""
     tp_ious = np.concatenate([s.tp_ious for s in images]) if images else np.zeros(0)
     tp, fp, fn = len(tp_ious), sum(s.fp for s in images), sum(s.fn for s in images)
     denom = tp + 0.5 * fp + 0.5 * fn

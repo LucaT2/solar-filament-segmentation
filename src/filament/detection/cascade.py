@@ -96,7 +96,7 @@ class CascadeRoIHeads(RoIHeads):
                 mask_idxs.append(m[pos])
             gt_boxes = [t["boxes"].to(proposals[0].dtype) for t in targets]
             gt_labels = [t["labels"] for t in targets]
-            losses = {}
+            losses, refined = {}, proposals
             for t in range(self.num_stages):
                 if t > 0:
                     proposals = [b.detach() for b in refined]

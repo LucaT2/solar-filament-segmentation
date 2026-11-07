@@ -12,7 +12,6 @@ module and its weights are unchanged, so checkpoints stay compatible.
 from __future__ import annotations
 
 import torch
-import torch.nn.functional as F
 from torchvision.models.detection import roi_heads as tv_roi_heads
 from torchvision.models.detection.roi_heads import RoIHeads, maskrcnn_loss, project_masks_on_boxes
 

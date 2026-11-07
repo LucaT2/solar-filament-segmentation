@@ -4,6 +4,7 @@ Usage:
     python scripts/setup/make_folds.py
 """
 
+import argparse
 import pandas as pd
 
 from filament.data.annotations import annotator_image_table, load_coco
@@ -12,6 +13,7 @@ from filament.paths import get_data_paths
 
 
 def main() -> None:
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     ai = annotator_image_table(load_coco(get_data_paths().annotations))
     folds = make_folds(ai)
     path = save_folds(folds)

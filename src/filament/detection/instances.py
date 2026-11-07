@@ -23,6 +23,8 @@ from filament.postprocess.components import Components
 
 @dataclass
 class Instances:
+    """Detections of one image: boxes, scores and soft masks in box coordinates, as Mask R-CNN outputs them."""
+
     boxes: np.ndarray  # (n, 4) float32, x0 y0 x1 y1 in image pixels
     scores: np.ndarray  # (n,) float32
     masks: np.ndarray  # (n, M, M) float16 mask probabilities inside each box

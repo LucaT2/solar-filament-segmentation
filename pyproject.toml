@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "filament"
-version = "0.1.0"
+version = "1.0.0"
 description = "Solar filament instance segmentation for the Kaggle Solar Filament Segmentation Challenge 2026"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"  # the pinned numpy and scipy need 3.12+
 authors = [{ name = "Luca Tasadan", email = "luca.tasadan@gmail.com" }]
 # Runtime dependencies are pinned in requirements.txt.
 

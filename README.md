@@ -54,7 +54,7 @@ model, consensus targets, pseudo-labels, neighbouring frames, copy-paste, Cascad
 
 ## Quick start
 
-Requires Python 3.12 and, for reasonable speed, a GPU.
+Requires Python 3.12 or newer (tested on 3.12 and 3.13) and, for reasonable speed, a GPU.
 
 ```bash
 git clone https://github.com/LucaT2/solar-filament-segmentation.git

@@ -11,8 +11,12 @@ Stages: load (JPEG + disk + normalisation, CPU), unet, detector, merge (views / 
 (components, classifier, RLE encoding, CPU). GPU stages are synchronised before the clock stops; peak GPU memory is
 measured per pipeline.
 
+Only ``dino_full_tta8`` runs from a fresh clone (after ``scripts/final/download_weights.py``); the others need the
+experiment folders in outputs/.
+
 Usage:
     python scripts/evaluation/time_inference.py --images 20 --out outputs/inference_timing.csv
+    python scripts/evaluation/time_inference.py --only dino_full_tta8
 """
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ from __future__ import annotations
 import argparse
 import time
 from collections import defaultdict
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -33,7 +38,7 @@ from filament.detection.instances import to_components, to_prob_map
 from filament.detection.model import predict_instances
 from filament.detection.tta import merge_views, predict_tta
 from filament.detection.train import build_from_config
-from filament.final import FINAL_CONFIG_DIR, FinalPipeline
+from filament.final import FINAL_CONFIG_DIR, VIEWS, FinalPipeline
 from filament.paths import get_data_paths, resolve_exp_dir
 from filament.postprocess.pipeline import load_postprocess
 from filament.postprocess.rescoring import Rescorer, component_table
@@ -131,23 +136,31 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     paths = sorted(get_data_paths().test_images.glob("*.jpeg"))
     warm, timed = paths[:2], paths[2:2 + args.images]
-    w40 = resolve_exp_dir("final_w40")
-    cfg_w40, rescorer = load_postprocess(w40 / "postprocess.json"), Rescorer.load(w40 / "rescorer.pkl")
-    cfg_det = load_postprocess(resolve_exp_dir("det5f_tta") / "postprocess.json")
-    cfg_unet = load_postprocess(resolve_exp_dir("unet5f_d8") / "postprocess.json")
-    cfg_final = load_postprocess(FINAL_CONFIG_DIR / "postprocess.json")
+    # each builder loads its models and settings only when that pipeline is timed, and returns run(clock, path)
+    def final():
+        cfg = load_postprocess(FINAL_CONFIG_DIR / "postprocess.json")
+        return partial(run_detector, models=[FinalPipeline.load(device).model], views=VIEWS, cfg=cfg, device=device)
+
+    def detector(folds, views):
+        cfg = load_postprocess(resolve_exp_dir("det5f_tta") / "postprocess.json")
+        return partial(run_detector, models=load_detectors(folds, device), views=views, cfg=cfg, device=device)
+
+    def unet():
+        cfg = load_postprocess(resolve_exp_dir("unet5f_d8") / "postprocess.json")
+        return partial(run_unet, unets=load_unets(UNETS[1:], [0], device), tta="none", cfg=cfg, device=device)
+
+    def w40():
+        exp = resolve_exp_dir("final_w40")
+        return partial(run_w40, unets=load_unets(UNETS, range(5), device), detectors=load_detectors(range(5), device),
+                       cfg=load_postprocess(exp / "postprocess.json"), rescorer=Rescorer.load(exp / "rescorer.pkl"),
+                       device=device)
 
     pipelines = {
-        "dino_full_tta8": lambda: (lambda c, p, m=[FinalPipeline.load(device).model]: run_detector(
-            c, p, m, 8, cfg_final, device)),
-        "detector_1model": lambda: (lambda c, p, m=load_detectors([0], device): run_detector(c, p, m, 1, cfg_det,
-                                                                                               device)),
-        "detector_5f_tta8": lambda: (lambda c, p, m=load_detectors(range(5), device): run_detector(c, p, m, 8, cfg_det,
-                                                                                                    device)),
-        "unet_1model": lambda: (lambda c, p, m=load_unets(UNETS[1:], [0], device): run_unet(c, p, m, "none", cfg_unet,
-                                                                                            device)),
-        "w40_classifier": lambda: (lambda c, p, u=load_unets(UNETS, range(5), device),
-                                   d=load_detectors(range(5), device): run_w40(c, p, u, d, cfg_w40, rescorer, device)),
+        "dino_full_tta8": final,
+        "detector_1model": partial(detector, [0], 1),
+        "detector_5f_tta8": partial(detector, range(5), 8),
+        "unet_1model": unet,
+        "w40_classifier": w40,
     }
     rows = []
     for name, build in pipelines.items():

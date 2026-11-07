@@ -17,6 +17,8 @@ from filament.data.images import disk_mask, find_disk, read_image
 
 @dataclass(frozen=True)
 class PostConfig:
+    """Post-processing settings, tuned on out-of-fold predictions (``scripts/postprocess/tune_postprocess.py``)."""
+
     threshold: float = 0.5  # on the probability map (in [0, 1]); sets the outline width
     min_area: int = 0  # drop components smaller than this (px)
     min_score: float = 0.0  # drop components whose mean probability is below this

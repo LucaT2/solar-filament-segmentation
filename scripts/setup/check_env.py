@@ -6,6 +6,7 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import importlib
 import platform
 import sys
@@ -76,6 +77,7 @@ def check_data() -> bool:
 
 
 def main() -> int:
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     print(f"Python {sys.version.split()[0]} on {platform.platform()}")
     print("Packages:")
     pkgs = check_packages()

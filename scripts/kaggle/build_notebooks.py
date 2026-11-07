@@ -9,10 +9,12 @@ here, re-run, commit, push, then re-import the notebook on Kaggle.
 Usage:
     python scripts/kaggle/build_notebooks.py
 """
+import argparse
 from pathlib import Path
 
 import nbformat as nbf
 
+argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 cells = []

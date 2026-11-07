@@ -8,6 +8,7 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import shutil
@@ -32,6 +33,7 @@ def asset_name(checkpoint: str) -> str:
 
 
 def main() -> None:
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     manifest = json.loads((FINAL_CONFIG_DIR / "weights.json").read_text())
     for checkpoint, expected in manifest["files"].items():
         target = get_output_dir() / checkpoint

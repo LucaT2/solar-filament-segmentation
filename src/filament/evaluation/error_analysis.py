@@ -20,7 +20,7 @@ from filament.data.images import find_disk, read_image
 from filament.evaluation.scoring import GroundTruth
 from filament.postprocess.components import PostConfig, find_components
 from filament.postprocess.maps import load_prob
-from filament.postprocess.rescoring import FEATURES, component_table, feature_matrix, oof_probabilities
+from filament.postprocess.rescoring import component_table, feature_matrix, oof_probabilities
 
 OUTCOMES = ["match", "low_iou", "missing", "split", "merged"]
 

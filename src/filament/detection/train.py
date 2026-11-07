@@ -40,6 +40,8 @@ from filament.tracking import start_run
 
 @dataclass
 class DetTrainConfig:
+    """One detection experiment: architecture, data, schedule. Loaded from a YAML file with ``--set`` overrides."""
+
     name: str = "maskrcnn_r50_v2"
     arch: str = "maskrcnn"  # maskrcnn | cascade (three box stages at IoU 0.5 / 0.6 / 0.7) | mask2former
     pretrained: bool = True  # COCO weights
@@ -103,6 +105,7 @@ class DetTrainConfig:
 
 
 def build_from_config(cfg: dict | DetTrainConfig, pretrained: bool | None = None):
+    """The untrained model of an experiment; ``pretrained=False`` skips downloading weights (to load a checkpoint)."""
     c = cfg if isinstance(cfg, dict) else asdict(cfg)
     if c.get("arch") == "mask2former":
         from filament.detection.mask2former import Mask2FormerDetector

@@ -1,4 +1,4 @@
-"""Paired comparison of two experiments on the same out-of-fold images: ΔPQ with a bootstrap confidence interval.
+"""Paired comparison of two experiments on the same out-of-fold images: PQ(B) - PQ(A) with a bootstrap confidence interval.
 
 Both experiments (probability maps or instances) are post-processed (threshold, size filter; no classifier) and scored with the exact PQ on the
 images they have in common. Resampling *images* (with all their annotator-images) 2,000 times gives the uncertainty
@@ -99,7 +99,7 @@ def main() -> None:
                          index=["PQ", "SQ", "RQ", "TP", "FP", "FN"])
     table["B - A"] = table.B - table.A
     print(table.round(4).to_string())
-    print(f"\nΔPQ = {pb - pa:+.4f}   95% CI [{lo:+.4f}, {hi:+.4f}]   P(B better) = {(delta > 0).mean():.2f}")
+    print(f"\ndelta PQ = {pb - pa:+.4f}   95% CI [{lo:+.4f}, {hi:+.4f}]   P(B better) = {(delta > 0).mean():.2f}")
 
     site = pd.Series([s[14] for s in stems], index=stems)
     rows = []

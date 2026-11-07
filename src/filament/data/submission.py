@@ -41,6 +41,7 @@ def build_submission(predictions: Mapping[str, Iterable[np.ndarray | str]]) -> p
 
 
 def write_submission(df: pd.DataFrame, path: str | Path) -> Path:
+    """Writes the submission CSV in the format the competition expects."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     # QUOTE_NONE: the counts must be written without quotation marks (RLE counts never contain commas).

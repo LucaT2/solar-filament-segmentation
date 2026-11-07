@@ -17,7 +17,7 @@ import argparse
 import json
 import shutil
 
-from filament.paths import REPO_ROOT, get_output_dir, resolve_exp_dir
+from filament.paths import REPO_ROOT, resolve_exp_dir
 
 PATTERNS = ["fold*.pt", "full_s*.pt", "postprocess.json", "rescorer.json", "config.yaml", "log_*.csv", "result_*.json"]
 

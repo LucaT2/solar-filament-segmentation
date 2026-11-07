@@ -105,7 +105,7 @@ def score_human(ann, ai, stems):
     multi = ai[(ai.n_annotators > 1) & ai.stem.isin(stems)]
     first = set(multi.drop_duplicates("stem").annotator_image)
     images, dice = [], {}
-    for stem, g in ann[ann.stem.isin(set(multi.stem))].groupby("stem"):
+    for _, g in ann[ann.stem.isin(set(multi.stem))].groupby("stem"):
         pred = g[g.annotator_image.isin(first)].rle.tolist()
         pred_px = np.flatnonzero(np.any([rle_to_mask(r) for r in pred], axis=0)) if pred else np.zeros(0, np.int64)
         for aid, o in g[~g.annotator_image.isin(first)].groupby("annotator_image"):

@@ -24,6 +24,8 @@ from filament.data.rle import rle_to_mask, rle_union
 
 @dataclass
 class ImageInfo:
+    """What the models need to know about one image besides its pixels."""
+
     stem: str
     path: Path
     disk: Disk
@@ -32,6 +34,7 @@ class ImageInfo:
 
 
 def image_info(path: Path) -> ImageInfo:
+    """Finds the solar disk and the mean and spread of the brightness inside 0.95 of its radius."""
     img = read_image(path)
     disk = find_disk(img)
     yy, xx = np.ogrid[: img.shape[0], : img.shape[1]]

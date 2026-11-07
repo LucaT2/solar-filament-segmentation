@@ -6,6 +6,7 @@ probability map with the skeleton overlaid. Uses the largest filament of a fold-
 Usage:
     python scripts/figures/skeleton_recall_example.py
 """
+import argparse
 import json
 from pathlib import Path
 
@@ -19,6 +20,8 @@ from filament.data.images import read_image
 from filament.paths import get_data_paths
 from filament.postprocess.maps import load_prob
 from filament.segmentation.dataset import tubed_skeleton
+
+argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
 
 p = get_data_paths()
 coco = json.load(open(p.annotations))

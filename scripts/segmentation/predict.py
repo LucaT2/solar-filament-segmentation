@@ -26,7 +26,7 @@ from tqdm import tqdm
 
 from filament.data.folds import load_folds
 from filament.data.images import read_image
-from filament.paths import get_data_paths, get_output_dir, resolve_exp_dir
+from filament.paths import get_data_paths, resolve_exp_dir
 from filament.postprocess.maps import save_prob
 from filament.segmentation.dataset import image_info, normalize_with
 from filament.segmentation.model import build_model, n_outputs, predict_full

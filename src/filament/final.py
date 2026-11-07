@@ -38,12 +38,15 @@ FINAL_CONFIG_DIR = REPO_ROOT / "configs" / "final"
 
 @dataclass
 class FinalPipeline:
+    """The trained model with its tuned settings; ``segment`` goes from an image file to filament masks."""
+
     model: torch.nn.Module
     cfg: PostConfig
     device: torch.device
 
     @classmethod
     def load(cls, device: torch.device | str | None = None) -> "FinalPipeline":
+        """The checkpoint (from ``scripts/final/download_weights.py``) and ``configs/final/postprocess.json``."""
         device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         state = torch.load(resolve_exp_dir(EXPERIMENT) / CHECKPOINT, map_location=device)
         model = build_from_config(state["config"], pretrained=False)

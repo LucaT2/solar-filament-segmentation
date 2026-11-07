@@ -14,14 +14,13 @@ from __future__ import annotations
 
 import argparse
 import time
-from pathlib import Path
 
 import numpy as np
 
 from filament.data.annotations import annotation_table, load_coco
 from filament.data.folds import load_folds
 from filament.evaluation.scoring import GroundTruth, grid_search
-from filament.paths import get_data_paths, get_output_dir, resolve_exp_dir
+from filament.paths import get_data_paths, resolve_exp_dir
 from filament.postprocess.components import PostConfig
 from filament.postprocess.pipeline import save_postprocess
 from filament.postprocess.predictions import available_stems

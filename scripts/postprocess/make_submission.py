@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 
 from filament.data.submission import validate_submission, write_submission
-from filament.paths import get_data_paths, get_output_dir, resolve_exp_dir
+from filament.paths import get_data_paths, resolve_exp_dir
 from filament.postprocess.pipeline import load_postprocess, predictions_to_submission
 from filament.postprocess.predictions import available_stems
 from filament.postprocess.rescoring import Rescorer

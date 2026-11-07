@@ -1,7 +1,8 @@
 """Generate notebooks/solar_filament_pipeline.ipynb, the end-to-end walk-through of the submitted pipeline, and
 notebooks/kaggle/kaggle_check_pipeline.ipynb, which runs that walk-through on Kaggle from a fresh install.
 
-Edit the notebooks here, then run the walk-through from the repo root so its outputs are saved:
+Running this overwrites both notebooks without outputs. Edit the notebooks here, then run the walk-through from the
+repo root so its outputs are saved:
     python scripts/final/build_pipeline_notebook.py
     jupyter nbconvert --to notebook --execute --inplace notebooks/solar_filament_pipeline.ipynb \
         --ExecutePreprocessor.timeout=-1
@@ -9,6 +10,7 @@ Edit the notebooks here, then run the walk-through from the repo root so its out
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import nbformat as nbf
@@ -368,6 +370,7 @@ print(json.dumps(report, indent=2))"""),
 
 
 def main() -> None:
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     nb = nbf.v4.new_notebook(metadata={"kernelspec": {"display_name": "Python 3", "language": "python",
                                                       "name": "python3"}})
     nb.cells = [nbf.v4.new_markdown_cell(src) if kind == "md" else nbf.v4.new_code_cell(src) for kind, src in CELLS]

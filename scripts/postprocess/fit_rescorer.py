@@ -25,7 +25,7 @@ from filament.data.folds import load_folds
 from filament.evaluation.error_analysis import build_tables
 from filament.evaluation.metric import score_images
 from filament.evaluation.scoring import GroundTruth, score_components
-from filament.paths import get_data_paths, get_output_dir, resolve_exp_dir
+from filament.paths import get_data_paths, resolve_exp_dir
 from filament.postprocess.components import find_components, region_for
 from filament.postprocess.maps import load_prob
 from filament.postprocess.pipeline import load_postprocess

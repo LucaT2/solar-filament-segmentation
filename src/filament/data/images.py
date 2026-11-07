@@ -21,6 +21,8 @@ def read_image(path: str | Path) -> np.ndarray:
 
 @dataclass(frozen=True)
 class Disk:
+    """The solar disk in image pixels: centre and radius."""
+
     cx: float
     cy: float
     radius: float

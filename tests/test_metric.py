@@ -93,7 +93,7 @@ def perturbed_predictions(ann, ai, stems, seed=0):
         aid = ai[ai.stem == stem].annotator_image.iloc[0]
         masks = [rle_to_mask(r) for r in ann[ann.annotator_image == aid].rle]
         out = []
-        for i, m in enumerate(masks):
+        for m in masks:
             op = rng.choice(["keep", "dilate", "erode", "shift", "drop", "split", "dup"])
             mu8 = m.astype(np.uint8)
             if op == "keep":
