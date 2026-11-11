@@ -257,14 +257,14 @@ print(f"agreement: PQ {agreement.pq:.4f}, SQ {agreement.sq:.4f}, RQ {agreement.r
 The fold-0 model (same recipe, trained on folds 1–4) on the 142 images of fold 0, from
 `scripts/evaluation/rubric_metrics.py`. The final model trained on 25% more images, which cannot be measured here.
 The human reference is on all multi-annotated images."""),
-    ("code", """model = pd.read_csv(root / "notes/results/dino_fold0/summary.csv").set_index("experiment")
-human = pd.read_csv(root / "notes/results/rubric_summary.csv").set_index("experiment").loc[["human"]]
+    ("code", """model = pd.read_csv(root / "results/dino_fold0/summary.csv").set_index("experiment")
+human = pd.read_csv(root / "results/rubric_summary.csv").set_index("experiment").loc[["human"]]
 columns = {"pq": "PQ", "sq": "SQ", "rq": "RQ", "precision": "precision", "recall": "recall",
            "overlap_median_dice": "median pair Dice", "pixel_dice_median": "median pixel Dice",
            "gt_missed": "GT missed", "gt_split_1ton": "1:n splits", "pred_merge_nto1": "n:1 merges"}
 table = pd.concat([model, human]).rename(index={"mrcnn_dino_f0_tta8": "fold-0 model", "human": "human agreement"})
 table[list(columns)].rename(columns=columns).round(3).T"""),
-    ("code", """timing = pd.read_csv(root / "notes/results/inference_timing.csv")
+    ("code", """timing = pd.read_csv(root / "results/inference_timing.csv")
 timing[["pipeline", "device", "total_s_per_image", "test_set_min", "peak_gpu_gib"]].round(2)"""),
 ]
 

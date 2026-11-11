@@ -39,7 +39,7 @@ def test_perfect_and_partial_match():
 
 
 def test_fragmentation_example():
-    """A filament split into two halves below IoU 0.5 -> 0 TP, 2 FP, 1 FN (the worked example in the notes)."""
+    """A filament split into two halves below IoU 0.5 -> 0 TP, 2 FP, 1 FN (a worked example of the metric)."""
     gt = table([("000001-20110120105534Ch_1", rect(100, 100, 10, 100))])
     halves = table([("20110120105534Ch_1", rect(100, 100, 10, 48)), ("20110120105534Ch_2", rect(100, 152, 10, 48))])
     r = pq_score(gt, halves)

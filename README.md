@@ -95,7 +95,7 @@ python scripts/final/predict.py
 
 To compare two experiments on the same images, use `scripts/evaluation/compare.py` (paired ΔPQ with a bootstrap
 confidence interval). `scripts/evaluation/rubric_metrics.py` computes the table above, `scripts/figures/report_figures.py` the report's figures and 95% intervals, and
-`scripts/evaluation/time_inference.py` the timing. Results are in [notes/results/](notes/results/).
+`scripts/evaluation/time_inference.py` the timing. Results are in [results/](results/).
 
 Runs are logged to Weights & Biases when credentials are available; otherwise nothing is logged.
 
@@ -121,7 +121,7 @@ configs/
   folds.csv               the fixed 5-fold split
   segmentation/ detection/  one YAML per experiment; archive/ holds screened-out experiments
 notebooks/                the pipeline walk-through; analysis/ (EDA, error analysis); kaggle/ (training, clean-install check)
-notes/                    data findings, error analysis, literature, results, figures
+results/                  the numbers behind the README and the report: fold-0 metrics, human reference, timing
 submissions/              the submitted CSV files
 tests/                    metric equivalence, RLE/submission round-trip, folds, post-processing, training parts
 ```

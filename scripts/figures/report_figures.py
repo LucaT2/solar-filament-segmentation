@@ -9,7 +9,7 @@
 * intervals.csv  the numbers of the report's table, with 95% intervals
 
 Intervals: PQ, SQ, RQ, precision, recall and pixel Dice resample *images* (with all their annotator-images) 2,000
-times; per-filament rates (found, 1:n, n:1) use Wilson intervals. The metric inputs are in notes/results/dino_fold0/
+times; per-filament rates (found, 1:n, n:1) use Wilson intervals. The metric inputs are in results/dino_fold0/
 (scripts/evaluation/rubric_metrics.py --exp mrcnn_dino_f0_tta8 --human).
 
 Usage:
@@ -36,7 +36,7 @@ from filament.data.images import read_image
 from filament.data.rle import counts_to_mask, rle_to_mask
 from filament.paths import REPO_ROOT, get_data_paths, resolve_exp_dir
 
-RESULTS = REPO_ROOT / "notes" / "results" / "dino_fold0"
+RESULTS = REPO_ROOT / "results" / "dino_fold0"
 MODEL, HUMAN = "mrcnn_dino_f0_tta8", "human"
 PIPELINE_IMAGE = "20140420195854Bh"  # the walk-through notebook's example
 SIZE_BINS, SIZE_NAMES = [0, 800, 3200, np.inf], ["small\n<800", "medium\n800-3200", "large\n>3200"]

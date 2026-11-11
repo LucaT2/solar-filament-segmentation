@@ -59,7 +59,7 @@ ax[3].set_title(f"model probability; recall on skeleton = {rec:.2f}")
 for a in ax:
     a.axis("off")
 plt.tight_layout()
-out = Path("notes/figures/skeleton_recall_example.png")
+out = Path("outputs/figures/skeleton_recall_example.png")
 out.parent.mkdir(parents=True, exist_ok=True)
 plt.savefig(out, dpi=110)
 print(out, stem, f"recall={rec:.3f}", m.sum(), sk.sum())
