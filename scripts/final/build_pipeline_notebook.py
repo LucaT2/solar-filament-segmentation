@@ -66,6 +66,10 @@ def run(script, *args):
     subprocess.run([sys.executable, "-W", "ignore", str(root / script), *map(str, args)], check=True, cwd=root, env=env)
 
 
+import warnings
+
+warnings.filterwarnings("ignore", message="IProgress not found")  # tqdm without ipywidgets: plain progress bars
+
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
@@ -75,10 +79,9 @@ import yaml
 
 from filament.data.annotations import annotation_table, load_coco
 from filament.data.folds import load_folds
-from filament.data.images import read_image
+from filament.data.images import disk_mask, read_image
 from filament.data.rle import rle_to_mask
 from filament.data.submission import read_submission, validate_submission
-from filament.data.images import disk_mask
 from filament.detection import tta
 from filament.detection.dataset import full_image_input
 from filament.detection.instances import to_components, to_prob_map
@@ -90,8 +93,9 @@ from filament.postprocess.pipeline import load_postprocess
 from filament.segmentation.dataset import image_info
 
 paths = get_data_paths()
-print("repo:", root)
-print("data:", paths.root)
+data = paths.root.relative_to(root) if paths.root.is_relative_to(root) else paths.root
+print("repo:", root.name)
+print("data:", data)
 print("device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU (slow)")"""),
 
     ("md", """## 2. Data
