@@ -1,4 +1,4 @@
-# Stage 4: Error analysis of the U-Net baseline
+# Error analysis of the U-Net baseline
 
 Source: [notebooks/analysis/02_error_analysis.ipynb](../notebooks/analysis/02_error_analysis.ipynb) (code in `src/filament/evaluation/error_analysis.py`).
 Model: `unet_r34` (U-Net ResNet34, 30 epochs), **fold 0 only** (142 images, 235 annotator-images, 1,643 true
@@ -76,7 +76,7 @@ image.
   stable for cut-offs from 0.2 to 0.5. Replacing the size filter entirely gives the same (0.420).
 - The cut-off was chosen on the same fold, so the true gain is probably slightly smaller.
 
-## Priorities for Stage 5
+## Priorities for the next models
 
 1. **Component rescoring** (+0.03 on fold 0, cheap): train the classifier on the OOF components of all 5 folds, tune
    its cut-off on OOF PQ, and apply it to test components. Needs folds 1–4.

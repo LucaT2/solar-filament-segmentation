@@ -1,4 +1,4 @@
-# Stage 5 step 3a (encoder screen): current best recipe (skel050: Skeleton Recall 0.5, 512 crops, 30 epochs)
+# Encoder screen: current best recipe (skel050: Skeleton Recall 0.5, 512 crops, 30 epochs)
 # with an EfficientNet-B4 encoder (timm weights). Stride-2 stem -> high-resolution skips for thin outlines.
 # Batch 16 (fits a 16 GB T4: ~11.5 GiB); lr scaled up moderately for the larger batch; encoder at 0.25x lr.
 name: unet_effb4_skel050

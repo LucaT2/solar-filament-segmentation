@@ -1,4 +1,4 @@
-# Stage 5 step 3b (decoder screen): ConvNeXt-Tiny encoder + UPerNet decoder (multi-scale context decoder (pyramid pooling + FPN); predicts at 1/4 resolution),
+# Decoder screen: ConvNeXt-Tiny encoder + UPerNet decoder (multi-scale context decoder (pyramid pooling + FPN); predicts at 1/4 resolution),
 # otherwise identical to unet_convnext_t_skel050 (skel050 recipe, batch 16, lr 7e-4, encoder lr x0.25).
 name: upernet_convnext_t_skel050
 arch: UPerNet

@@ -1,4 +1,4 @@
-# Stage 5, step 1 ablation: identical to unet_r34_c1024_skel but WITHOUT the Skeleton Recall loss.
+# Ablation: identical to unet_r34_c1024_skel but WITHOUT the Skeleton Recall loss.
 # Comparing the two isolates the loss's effect; comparing this one with unet_r34 isolates crops + longer training.
 name: unet_r34_c1024
 arch: Unet

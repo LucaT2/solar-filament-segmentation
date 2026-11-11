@@ -1,4 +1,4 @@
-# Stage 1 findings
+# Data findings
 
 Source: [notebooks/analysis/01_eda.ipynb](../notebooks/analysis/01_eda.ipynb) (analysis code in `src/filament/analysis/eda.py`). Literature:
 [literature.md](literature.md).
@@ -44,7 +44,7 @@ scores a submission (296 images with 2–3 annotations, 1,196 ordered pairs).
   hurts (link 6 px: 0.337, 20 px: 0.326).
 - 0.4% of masks have more than one piece (the MAGFiLO cleanup merged or split them).
 
-**Consequence:** the planned instance head (boundary/distance maps + watershed) is **not needed**. Instances =
+**Consequence:** an instance head (boundary/distance maps + watershed) is **not needed**. Instances =
 connected components of a good binary mask. The remaining instance risk is on the *prediction* side: a model breaking
 one filament into pieces at thin necks, which is a connectivity problem (Skeleton Recall loss and post-processing), not
 a touching-instances problem.
@@ -107,7 +107,7 @@ are stratified by site and annotator count.
 - Training on all annotations (the organizers say to treat each annotator-image as a separate image) gives the model an
   averaged style. Averaging annotators into soft targets is a second option to compare.
 
-## Changes to the plan
+## Consequences for the design
 
 1. **Drop** the multi-task instance head and watershed. Use semantic segmentation → connected components (no linking).
 2. **Focus** on (a) accurate boundaries at full resolution, (b) connectivity so filaments don't fragment (Skeleton Recall

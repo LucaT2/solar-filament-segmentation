@@ -49,8 +49,9 @@ LB of 0.39 at 25.7 s per image, 11× slower. On held-out images its PQ advantage
 ΔPQ −0.006 [−0.019, +0.006] for the fold-0 DINOv3 model against it. Its file is
 `submissions/submission_final_w40.csv`.
 
-[PLAN.md](PLAN.md) is the full experiment log, including everything that did not help (a component classifier on this
-model, consensus targets, pseudo-labels, neighbouring frames, copy-paste, Cascade R-CNN, Mask2Former, and more).
+The configurations of the experiments that did not make it into the final pipeline (a component classifier on this
+model, consensus targets, pseudo-labels, neighbouring frames, copy-paste, Cascade R-CNN, Mask2Former, and more) are
+kept in `configs/` for reference; the code paths they use are in `src/filament/`.
 
 ## Quick start
 

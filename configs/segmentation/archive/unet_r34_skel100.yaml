@@ -1,4 +1,4 @@
-# Stage 5 step 1b: baseline (512 crops, 30 epochs) + Skeleton Recall loss, weight 1.0.
+# Loss-weight sweep: baseline (512 crops, 30 epochs) + Skeleton Recall loss, weight 1.0.
 name: unet_r34_skel100
 arch: Unet
 encoder: resnet34

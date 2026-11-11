@@ -1,4 +1,4 @@
-# Stage 5 step 3b (decoder screen): ConvNeXt-Tiny encoder + MAnet decoder (U-Net-style decoder with attention blocks; decodes to full resolution),
+# Decoder screen: ConvNeXt-Tiny encoder + MAnet decoder (U-Net-style decoder with attention blocks; decodes to full resolution),
 # otherwise identical to unet_convnext_t_skel050 (skel050 recipe, batch 16, lr 7e-4, encoder lr x0.25).
 name: manet_convnext_t_skel050
 arch: MAnet

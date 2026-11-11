@@ -1,4 +1,4 @@
-# Stage 5, step 1: against splitting of large filaments.
+# Against splitting of large filaments.
 # Baseline unet_r34 + 1024 px crops (more context) + Skeleton Recall loss + longer training.
 # Pixels per epoch match the baseline (1000 x 1024^2 = 4000 x 512^2); 45 epochs instead of 30.
 name: unet_r34_c1024_skel

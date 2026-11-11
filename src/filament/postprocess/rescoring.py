@@ -1,6 +1,6 @@
 """Component rescoring: a small classifier that decides which predicted components to keep.
 
-Stage 4 showed that per-component features separate real filaments from false blobs much better than size alone
+The error analysis showed that per-component features separate real filaments from false blobs much better than size alone
 (fold 0: PQ 0.391 -> 0.419). The same feature code is used for the OOF analysis, for fitting, and for test
 prediction, so the classifier always sees identically computed inputs.
 """

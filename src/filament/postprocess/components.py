@@ -1,6 +1,6 @@
 """Probability map -> filament instances.
 
-Stage 1 showed ground-truth filaments almost never touch, so instances are the connected components of the
+The data analysis showed ground-truth filaments almost never touch, so instances are the connected components of the
 thresholded map. Components are then filtered by size and confidence, the knobs tuned on out-of-fold PQ.
 """
 

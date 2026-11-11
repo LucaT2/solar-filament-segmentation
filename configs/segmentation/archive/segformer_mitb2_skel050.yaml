@@ -1,4 +1,4 @@
-# Stage 5 step 3 (transformer screen): the original SegFormer: MiT-B2 encoder + its lightweight all-MLP head (predicts at 1/4 resolution).
+# Transformer screen: the original SegFormer: MiT-B2 encoder + its lightweight all-MLP head (predicts at 1/4 resolution).
 # skel050 recipe, batch 16; transformer fine-tuning defaults: encoder lr x0.1 (7e-5, as in SegFormer), weight decay 0.01.
 name: segformer_mitb2_skel050
 arch: Segformer

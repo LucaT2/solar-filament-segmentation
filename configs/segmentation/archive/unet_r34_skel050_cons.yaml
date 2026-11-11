@@ -1,4 +1,4 @@
-# Stage 5 step 2: skel050 (Skeleton Recall 0.5, 512 crops, 30 epochs) + consensus targets (average of all annotators).
+# Consensus targets: skel050 (Skeleton Recall 0.5, 512 crops, 30 epochs) + consensus targets (average of all annotators).
 name: unet_r34_skel050_cons
 arch: Unet
 encoder: resnet34

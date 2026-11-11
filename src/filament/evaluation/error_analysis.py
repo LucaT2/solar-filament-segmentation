@@ -1,4 +1,4 @@
-"""Error analysis of out-of-fold predictions (Stage 4).
+"""Error analysis of out-of-fold predictions.
 
 Two tables are built from cached probability maps:
 

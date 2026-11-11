@@ -1,7 +1,7 @@
 """Cross-validation folds.
 
 Folds are grouped by image stem: all annotators of one image land in the same fold, so the model never trains on
-one annotator's outline of an image it is validated on. Stage 1 showed this reproduces the train -> test time
+one annotator's outline of an image it is validated on. The data analysis showed this reproduces the train -> test time
 structure (test images are as close in time to training images as training images are to each other).
 Folds are stratified by GONG site x number of annotators.
 """

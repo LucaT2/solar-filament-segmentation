@@ -93,7 +93,7 @@ Short summaries of prior work and what each implies for this competition. Each e
 - Skeletonize the *ground truth* on the CPU, thicken it slightly, and add a soft-recall loss on that tube. It beats clDice
   on 5 datasets for about +8% training time.
 - *Implication:* the cheapest way to fight **fragmentation** (filaments broken at thin necks), our main PQ risk. A
-  first-choice addition to BCE+Dice in Stage 5.
+  first-choice addition to BCE+Dice.
 
 **DenseCRF: Krähenbühl & Koltun, NeurIPS 2011** ([paper](https://arxiv.org/abs/1210.5644)); used as post-processing in DeepLab v1/v2
 - A fully connected conditional random field refines a probability map: pixels that are close together *and* similar
@@ -135,7 +135,7 @@ U-Net (semantic segmentation + connected components) comes first for practical r
 
 Mask R-CNN's potential advantage is **object-level reasoning**: a learned confidence per filament, and deciding from
 context what counts as one filament. That targets the weakest part of PQ, recognition (human RQ 0.54: missing faint
-filaments, merges, splits). It is therefore worth testing in Stage 5, either as a model of its own or as an ensemble
+filaments, merges, splits). It is therefore worth testing, either as a model of its own or as an ensemble
 partner. The cheaper hybrid is a U-Net plus a small classifier that rescores each connected component.
 
 ## Summary for our approach

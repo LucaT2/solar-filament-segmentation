@@ -2,7 +2,7 @@
 # + neighbouring GONG frames (A1): a training crop comes from a random aligned neighbour frame of its image with
 # probability 0.5, with the original masks (filament.data.neighbours; host-approved for training, never at
 # inference). Everything else identical to the reference config, so the run compares directly with it.
-# Stage 5 step 3a (encoder screen): current best recipe (skel050: Skeleton Recall 0.5, 512 crops, 30 epochs)
+# Encoder screen: current best recipe (skel050: Skeleton Recall 0.5, 512 crops, 30 epochs)
 # with a ConvNeXt-Tiny encoder (timm weights). Large 7x7 kernels -> more context; stride-4 stem -> no 1/2-res skip.
 # Same batch / learning-rate scheme as unet_effb4_skel050 so the two encoders are directly comparable.
 name: unet_convnext_t_skel050_nb

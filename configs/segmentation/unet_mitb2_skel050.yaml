@@ -1,4 +1,4 @@
-# Stage 5 step 3 (transformer screen): MiT-B2 (SegFormer's transformer encoder) + U-Net decoder.
+# Transformer screen: MiT-B2 (SegFormer's transformer encoder) + U-Net decoder.
 # skel050 recipe, batch 16; transformer fine-tuning defaults: encoder lr x0.1 (7e-5, as in SegFormer), weight decay 0.01.
 name: unet_mitb2_skel050
 arch: Unet
